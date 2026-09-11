@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+env/
+
+# Config / Secrets
+config/.env
+.env
+
+# Data
+data/external/*
+data/interim/*
+data/processed/*
+data/raw/*
+!data/raw/.gitkeep
+
+# Models (artefatos, binários)
+models/*
+!models/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IDE
+.vscode/
+.idea/

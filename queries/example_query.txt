@@ -1,0 +1,12 @@
+-- Exemplo de query para uso com databricks_connection
+-- Coloque suas queries SQL em arquivos .sql neste diretório.
+-- As queries em queries/get_data/ são consumidas pelos notebooks em notebooks/get_data/
+--
+-- Uso:
+--   from databricks_connection import read_query
+--   df = read_query("queries/get_data/nome_da_query.sql")
+
+SELECT *
+FROM schema.tabela
+WHERE data >= '{data_inicio}'
+LIMIT 100
