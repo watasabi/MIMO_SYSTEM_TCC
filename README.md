@@ -33,19 +33,23 @@
 
 ## Sobre o Projeto
 
-Uma breve descrição do contexto de negócio, objetivos e metodologia deste projeto.
+Reprodução e exploração do artigo [Ferrari, Leandro & Coelho (2025) — *Multi-objective metaheuristics applied for the multivariable system identification*](docs/pappers/papper_allan_leandro-1.pdf), que identifica um sistema MIMO (Multiple-Input Multiple-Output) do tipo ARMAX referente a um reservatório de distribuição de água (São José), comparando metaheurísticas mono-objetivo (GA, GWO, CS) e suas versões multiobjetivo (NSGA-II, MOGWO, MOCS).
+
+Os dados brutos (`data/raw/`) trazem dois sistemas reais de reservatório:
+
+- **São José** (`mimo_data.xlsx`) — sistema MIMO usado no artigo: 3 entradas (frequência das bombas de distribuição) e 4 saídas (vazão de entrada, vazão de distribuição, nível e pressão do reservatório).
+- **Tarumã** (`miso_data.xls`) — sistema MISO usado no trabalho anterior citado pelo artigo, mantido apenas como referência.
 
 ### Documentação
 
 | Recurso | Link |
 |---------|------|
-| Confluence / Wiki | `<colar link aqui>` |
-| Jira / Board | `<colar link aqui>` |
-| GitLab Repo | `<colar link aqui>` |
+| Artigo de referência | [docs/pappers/papper_allan_leandro-1.pdf](docs/pappers/papper_allan_leandro-1.pdf) |
+| Notebook de exploração | [notebooks/eda/01_exploracao_reservatorio_mimo.ipynb](notebooks/eda/01_exploracao_reservatorio_mimo.ipynb) |
+| GitHub Repo | https://github.com/watasabi/mimo_sys |
 
 ### Principais Stakeholders
-* **Nome** (Area/Cargo) - [email@exemplo.com]
-* **Nome** (Area/Cargo) - [email@exemplo.com]
+* **Rodrigo Watanabe Pisaia** — autor
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
@@ -124,6 +128,14 @@ Edite o arquivo `config/.env` com as credenciais necessárias:
 | `DATABRICKS_HTTP_PATH` | HTTP Databricks Warehouse |
 
 > **IMPORTANTE:** O arquivo `config/.env` está no `.gitignore` e **nunca** deve ser commitado. Use `config/.env.example` como referência.
+
+As dependências são gerenciadas via **UV**. As bibliotecas de visualização (`matplotlib`, `seaborn`, `plotly`) ficam no grupo opcional `plot` para manter o ambiente padrão enxuto:
+
+```bash
+uv sync                # dependências principais
+uv sync --group plot   # inclui também as libs de visualização
+uv run --group plot jupyter lab
+```
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
