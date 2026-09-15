@@ -53,7 +53,7 @@ Os dados brutos (`data/raw/`) trazem dois sistemas reais de reservatório:
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
-## 📂 Organização e Estrutura
+## Organização e Estrutura
 
 Este projeto segue uma estrutura padronizada para garantir reprodutibilidade.
 
@@ -104,14 +104,13 @@ Este projeto segue uma estrutura padronizada para garantir reprodutibilidade.
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
-## 🧠 Filosofia de Código
+## Filosofia de Código
 
 Este é um projeto de ciência de dados: a maior parte do código é exploratória ou analítica, e é lida com muito mais frequência do que reutilizada. Por isso, priorize **código simples e fácil de ler**, mesmo que isso signifique sacrificar parte da modularidade — um script linear e claro é melhor do que uma abstração prematura. Extraia funções, classes ou padrões (registry, base classes) apenas quando o reuso já é real, não como preparação para um reuso hipotético.
 
-
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
-## ⚙️ Configuração de Ambiente
+## Configuração de Ambiente
 
 As variáveis de ambiente do projeto ficam em `config/.env`. Para configurar:
 
@@ -139,7 +138,7 @@ uv run --group plot jupyter lab
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
-## 📝 Convenção de Commits
+## Convenção de Commits
 
 Este projeto segue o padrão **Conventional Commits**. Todas as mensagens de commit devem seguir o formato:
 
@@ -175,7 +174,7 @@ git commit -m "refactor(src): simplifica feature engineering"
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
-## 👤 Autor
+## Autor
 
 | Nome | Email |
 |------|-------|
@@ -183,7 +182,7 @@ git commit -m "refactor(src): simplifica feature engineering"
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
-## 📦 UV Sub-projects
+## UV Sub-projects
 
 Para usar UV sub-projects (dependências isoladas por modelo, ex: um modelo legado com versões conflitantes de libs), veja [docs/uv_subprojects.md](docs/uv_subprojects.md).
 
