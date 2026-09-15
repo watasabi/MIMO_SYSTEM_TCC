@@ -33,7 +33,7 @@
 
 ## Sobre o Projeto
 
-Reprodução e exploração do artigo [Ferrari, Leandro & Coelho (2025) — *Multi-objective metaheuristics applied for the multivariable system identification*](docs/pappers/papper_allan_leandro-1.pdf), que identifica um sistema MIMO (Multiple-Input Multiple-Output) do tipo ARMAX referente a um reservatório de distribuição de água (São José), comparando metaheurísticas mono-objetivo (GA, GWO, CS) e suas versões multiobjetivo (NSGA-II, MOGWO, MOCS).
+Reprodução e exploração do artigo [Ferrari, Leandro & Coelho (2025) — *Multi-objective metaheuristics applied for the multivariable system identification*](docs/pappers/Multi-objective%20metaheuristics%20applied%20for%20the%20multivariable%20system%20identification.pdf), que identifica um sistema MIMO (Multiple-Input Multiple-Output) do tipo ARMAX referente a um reservatório de distribuição de água (São José), comparando metaheurísticas mono-objetivo (GA, GWO, CS) e suas versões multiobjetivo (NSGA-II, MOGWO, MOCS).
 
 Os dados brutos (`data/raw/`) trazem dois sistemas reais de reservatório:
 
@@ -44,7 +44,7 @@ Os dados brutos (`data/raw/`) trazem dois sistemas reais de reservatório:
 
 | Recurso | Link |
 |---------|------|
-| Artigo de referência | [docs/pappers/papper_allan_leandro-1.pdf](docs/pappers/papper_allan_leandro-1.pdf) |
+| Artigo de referência | [docs/pappers/Multi-objective metaheuristics applied for the multivariable system identification.pdf](docs/pappers/Multi-objective%20metaheuristics%20applied%20for%20the%20multivariable%20system%20identification.pdf) |
 | Notebook de exploração | [notebooks/eda/01_exploracao_reservatorio_mimo.ipynb](notebooks/eda/01_exploracao_reservatorio_mimo.ipynb) |
 | GitHub Repo | https://github.com/watasabi/mimo_sys |
 
