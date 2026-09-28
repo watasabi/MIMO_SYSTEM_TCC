@@ -30,6 +30,8 @@ from typing import Dict, List, Optional, Tuple, Union
 # EWT
 import ewtpy
 from ewtpy import EWT1D
+
+
 class TimeSeriesPreprocessor:
     """State-of-the-art preprocessing for time series data."""
 
@@ -84,7 +86,9 @@ class TimeSeriesPreprocessor:
 
         if self.log_transform:
             min_val = processed.min(axis=0)
-            self.log_offset = np.where(min_val <= 0, np.abs(min_val) + 1.0, 0.0)
+            self.log_offset = np.where(
+                min_val <= 0, np.abs(min_val) + 1.0, 0.0
+            )
             processed = np.log(processed + self.log_offset)
 
         # force a writable copy: pandas >= 3.0 Copy-on-Write makes
@@ -94,8 +98,16 @@ class TimeSeriesPreprocessor:
         self._plot_comparison(data, processed, "After Imputation", time_stamps)
 
         if self.remove_outliers:
-            cleaned = np.stack([self._remove_outliers(processed[:, i]).ravel() for i in range(processed.shape[1])], axis=1)
-            self._plot_comparison(processed, cleaned, "After Outlier Removal", time_stamps)
+            cleaned = np.stack(
+                [
+                    self._remove_outliers(processed[:, i]).ravel()
+                    for i in range(processed.shape[1])
+                ],
+                axis=1,
+            )
+            self._plot_comparison(
+                processed, cleaned, "After Outlier Removal", time_stamps
+            )
             processed = cleaned
 
         if self.apply_ewt:
@@ -103,7 +115,9 @@ class TimeSeriesPreprocessor:
 
         if self.apply_filter:
             filtered = self.adaptive_filter(processed)
-            self._plot_comparison(processed, filtered, "After Adaptive Filtering", time_stamps)
+            self._plot_comparison(
+                processed, filtered, "After Adaptive Filtering", time_stamps
+            )
             processed = filtered
 
         # kept for inverse_transform: values right before differencing,
@@ -138,7 +152,12 @@ class TimeSeriesPreprocessor:
             if self.ewt_boundaries is None:
                 raise ValueError("EWT not fitted. Call fit_transform first.")
             for i in range(processed.shape[1]):
-                ewt, _, _ = EWT1D(processed[:, i], N=len(self.ewt_boundaries[i]), detect="given_bounds", boundaries=self.ewt_boundaries[i])
+                ewt, _, _ = EWT1D(
+                    processed[:, i],
+                    N=len(self.ewt_boundaries[i]),
+                    detect="given_bounds",
+                    boundaries=self.ewt_boundaries[i],
+                )
                 if self.detrend:
                     processed[:, i] -= ewt[:, self.trend_imf_idx]
 
@@ -240,28 +259,40 @@ class TimeSeriesPreprocessor:
 
         elif method == "zscore":
             z = (x - x.mean()) / x.std()
-            return np.clip(x, x.mean() - threshold * x.std(), x.mean() + threshold * x.std())
+            return np.clip(
+                x,
+                x.mean() - threshold * x.std(),
+                x.mean() + threshold * x.std(),
+            )
 
         elif method == "mad":
             med = np.median(x)
             mad = np.median(np.abs(x - med))
-            return np.where(np.abs((x - med) / (mad + 1e-6)) <= threshold * 1.4826, x, med)
+            return np.where(
+                np.abs((x - med) / (mad + 1e-6)) <= threshold * 1.4826, x, med
+            )
 
         elif method == "quantile":
-            low, high = np.percentile(x, [threshold * 100, 100 - threshold * 100])
+            low, high = np.percentile(
+                x, [threshold * 100, 100 - threshold * 100]
+            )
             return np.clip(x, low, high)
 
         elif method == "isolation_forest":
             from sklearn.ensemble import IsolationForest
+
             pred = IsolationForest(contamination=threshold).fit_predict(x)
             return np.where(pred == 1, x, np.nan)
 
         elif method == "lof":
-            pred = LocalOutlierFactor(n_neighbors=20, contamination=threshold).fit_predict(x)
+            pred = LocalOutlierFactor(
+                n_neighbors=20, contamination=threshold
+            ).fit_predict(x)
             return np.where(pred == 1, x, np.nan)
 
         elif method == "ecod":
             from pyod.models.ecod import ECOD
+
             pred = ECOD().fit(x).predict(x)
             return np.where(pred == 0, x, np.nan)
 
@@ -277,11 +308,18 @@ class TimeSeriesPreprocessor:
                 if df[col].isna().mean() < 0.05:
                     filled[col] = df[col].interpolate().ffill().bfill()
                 elif df[col].isna().mean() < 0.2:
-                    filled[col] = KNNImputer(n_neighbors=3).fit_transform(df[[col]]).ravel()
+                    filled[col] = (
+                        KNNImputer(n_neighbors=3)
+                        .fit_transform(df[[col]])
+                        .ravel()
+                    )
                 else:
                     try:
                         from fancyimpute import IterativeImputer
-                        filled[col] = IterativeImputer().fit_transform(df[[col]]).ravel()
+
+                        filled[col] = (
+                            IterativeImputer().fit_transform(df[[col]]).ravel()
+                        )
                     except ImportError:
                         filled[col] = df[col].fillna(df[col].mean())
             return filled.values
@@ -299,6 +337,7 @@ class TimeSeriesPreprocessor:
         elif method == "iterative":
             try:
                 from fancyimpute import IterativeImputer
+
                 return IterativeImputer().fit_transform(df)
             except ImportError:
                 warnings.warn("fancyimpute not installed, using mean fallback")
@@ -325,32 +364,52 @@ class TimeSeriesPreprocessor:
         return data
 
     def adaptive_filter(self, data):
-        return savgol_filter(data, self.filter_window, self.filter_polyorder, axis=0)
+        return savgol_filter(
+            data, self.filter_window, self.filter_polyorder, axis=0
+        )
 
-    def generate_time_features(self, timestamps, freq='h'):
-        df = pd.DataFrame({'ts': pd.to_datetime(timestamps)})
-        df['month'] = df.ts.dt.month / 12.0
-        df['day'] = df.ts.dt.day / 31.0
-        df['weekday'] = df.ts.dt.weekday / 6.0
-        df['hour'] = df.ts.dt.hour / 23.0 if freq.lower() == 'h' else 0.0
-        return df[['month', 'day', 'weekday', 'hour']].values.astype(np.float32)
+    def generate_time_features(self, timestamps, freq="h"):
+        df = pd.DataFrame({"ts": pd.to_datetime(timestamps)})
+        df["month"] = df.ts.dt.month / 12.0
+        df["day"] = df.ts.dt.day / 31.0
+        df["weekday"] = df.ts.dt.weekday / 6.0
+        df["hour"] = df.ts.dt.hour / 23.0 if freq.lower() == "h" else 0.0
+        return df[["month", "day", "weekday", "hour"]].values.astype(
+            np.float32
+        )
 
     def _create_sequences(self, data, feats=None):
         feats = list(range(data.shape[1])) if feats is None else feats
         X, y = [], []
         for i in range(len(data) - self.window_size - self.horizon + 1):
-            X.append(data[i:i+self.window_size])
-            y.append(data[i+self.window_size:i+self.window_size+self.horizon][:, feats])
+            X.append(data[i : i + self.window_size])
+            y.append(
+                data[
+                    i + self.window_size : i + self.window_size + self.horizon
+                ][:, feats]
+            )
         return np.array(X), np.array(y)
 
-    def _plot_comparison(self, original, cleaned, title="Preprocessing Comparison", time_stamps=None):
+    def _plot_comparison(
+        self,
+        original,
+        cleaned,
+        title="Preprocessing Comparison",
+        time_stamps=None,
+    ):
         original = np.atleast_2d(original)
         cleaned = np.atleast_2d(cleaned)
-        if original.shape[0] == 1: original = original.T
-        if cleaned.shape[0] == 1: cleaned = cleaned.T
+        if original.shape[0] == 1:
+            original = original.T
+        if cleaned.shape[0] == 1:
+            cleaned = cleaned.T
 
         fig, axs = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
-        x = time_stamps if time_stamps is not None else np.arange(original.shape[0])
+        x = (
+            time_stamps
+            if time_stamps is not None
+            else np.arange(original.shape[0])
+        )
 
         for i in range(original.shape[1]):
             axs[0].plot(x, original[:, i], label=f"Feature {i}")
