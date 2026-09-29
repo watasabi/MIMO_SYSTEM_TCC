@@ -20,6 +20,12 @@ dependencies = [
 dev = [
     "ipykernel>=7.3.0",
 ]
+ml = [
+    "lightning>=2.6.6",
+    "mlflow>=3.16.1",
+    "torch>=2.14.0",
+    "torchmetrics>=1.9.0",
+]
 
 [dependency-groups]
 dev = [
