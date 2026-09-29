@@ -23,6 +23,11 @@ models/*
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
 
+# MLflow / training run artifacts
+mlruns/
+mlflow.db
+notebooks/**/checkpoints/
+
 # IDE
 .vscode/
 .idea/
