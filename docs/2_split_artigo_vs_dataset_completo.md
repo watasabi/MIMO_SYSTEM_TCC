@@ -159,11 +159,67 @@ Leitura:
    No 70/15/15 (teste a partir da amostra 1876) e no holdout (a partir
    da 2008) não há esse vazamento.
 
-## 8. Como reproduzir
+## 8. Seq2Seq com `TimeSeriesPreprocessor`
+
+`notebooks/training/03_seq2seq_attention_preprocessor.ipynb` treina o
+mesmo Seq2Seq no split 70/15/15 com variantes de
+`mimo_sys.preprocessors.TimeSeriesPreprocessor` e mede o erro na
+**escala original**, via `inverse_transform`, nas 297 janelas
+deslizantes de teste (12 passos, passo 1). Esse protocolo difere do da
+seção 7 (forecast encadeado), então os números não são comparáveis.
+
+Variantes:
+
+- `V0`: só `StandardScaler`.
+- `V1`: remoção de outliers (IQR, limiar 1,5) + filtro Savitzky-Golay.
+- `V2`: `V1` + EWT/detrend, ajustado só no treino. Val/teste passam por
+  `transform`, e o `inverse_transform` extrapola a tendência.
+- `V3`: `V2` ajustado na série toda. **Vaza o futuro** (a tendência do
+  teste é conhecida), então serve só de limite superior.
+
+| Variante | R² vazão | R² nível | R² pressão | MSE vazão |
+|---|---|---|---|---|
+| Persistência (último `y`) | -1,184 | -0,786 | -1,139 | 1368,1 |
+| V0 normalização | 0,884 | **0,441** | **0,642** | 72,7 |
+| V1 outliers + filtro | **0,889** | 0,357 | 0,599 | **69,3** |
+| V2 EWT detrend (fit treino) | 0,779 | 0,276 | 0,432 | 138,4 |
+| V3 EWT detrend (fit série toda, vaza) | 0,871 | 0,297 | 0,635 | 81,0 |
+
+Leitura:
+
+1. O preprocessor **não melhorou** o Seq2Seq. `V0` e `V1` ficam
+   empatados dentro do que um seed e uma rodada permitem distinguir
+   (`V1` ganha 0,005 de R² na vazão e perde 0,08 no nível).
+2. EWT/detrend piora o resultado fora da amostra (`V2`: R² de vazão
+   0,779 e de pressão 0,432). Mesmo a versão que vaza o futuro (`V3`)
+   não supera `V0`. A tendência removida não parece ser o que limita o
+   modelo, e somar de volta uma tendência extrapolada acrescenta erro.
+3. O `inverse_transform` de `V2` extrapola a tendência a partir do fim
+   do treino com uma rampa linear, a mesma para todas as janelas, o que
+   é frágil para horizontes longe do treino. Para previsão
+   fora da amostra, a decomposição EWT precisaria ser causal.
+4. O limiar padrão do IQR (`outlier_threshold=0,05`) corta os dados para
+   dentro do intervalo interquartil, o que destrói a série (por exemplo,
+   a frequência da bomba 3 vira constante). Use 1,5 ou outro valor
+   explícito.
+5. Limites: um seed, sem tuning, e os quatro treinos pararam por early
+   stopping entre as épocas 40 e 48.
+
+Correção em `src`: `TimeSeriesPreprocessor.transform` com EWT quebrava
+(`EWT1D() got an unexpected keyword argument 'boundaries'`), porque o
+`ewtpy` instalado não aceita fronteiras dadas. Foi adicionada
+`_ewt_with_boundaries`, que repete o espelhamento e o banco de filtros
+de Meyer com as fronteiras do treino; `tests/test_preprocessors.py`
+verifica que `transform` reproduz `fit_transform` nos mesmos dados.
+
+## 9. Como reproduzir
 
 ```bash
 cd notebooks/processing && uv run python 03_full_dataset_sample.py
 cd ../training && uv run jupyter nbconvert --to notebook --execute \
     --inplace 02_seq2seq_attention_splits_vs_armax.ipynb
+# Preprocessor (precisa dos extras ml e do grupo plot):
+uv run --extra ml --group plot jupyter nbconvert --to notebook --execute \\
+    --inplace 03_seq2seq_attention_preprocessor.ipynb
 # EDA: notebooks/eda/02_split_vs_dataset_completo.ipynb
 ```
