@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from ewtpy import EWT1D
+from ewtpy import EWT1D, EWT_Meyer_FilterBank
 from scipy.signal import savgol_filter
 from sklearn.impute import KNNImputer
 from sklearn.neighbors import LocalOutlierFactor
@@ -24,6 +24,26 @@ OutlierMethod = Literal[
 ImputeMethod = Literal[
     "auto", "mean", "interpolate", "ffill", "bfill", "knn", "iterative"
 ]
+
+
+def _ewt_with_boundaries(
+    signal: npt.NDArray, boundaries: npt.NDArray
+) -> npt.NDArray:
+    """EWT of `signal` using fixed `boundaries` (as returned by `EWT1D`).
+
+    `EWT1D` only detects boundaries on the signal it receives, so this
+    reproduces its mirroring + Meyer filter-bank step with boundaries
+    fitted elsewhere (e.g. on the training set).
+    """
+    half = int(np.ceil(signal.size / 2))
+    mirrored = np.append(np.flip(signal[0 : half - 1]), signal)
+    mirrored = np.append(mirrored, np.flip(signal[-half - 1 : -1]))
+    spectrum = np.fft.fft(mirrored)
+    bank = EWT_Meyer_FilterBank(boundaries, spectrum.size)
+    ewt = np.zeros(bank.shape)
+    for k in range(bank.shape[1]):
+        ewt[:, k] = np.real(np.fft.ifft(np.conjugate(bank[:, k]) * spectrum))
+    return ewt[half - 1 : -half, :]
 
 
 class TimeSeriesPreprocessor:
@@ -171,11 +191,8 @@ class TimeSeriesPreprocessor:
             if self.ewt_boundaries is None:
                 raise ValueError("EWT not fitted. Call fit_transform first.")
             for i in range(processed.shape[1]):
-                ewt, _, _ = EWT1D(
-                    processed[:, i],
-                    N=len(self.ewt_boundaries[i]),
-                    detect="given_bounds",
-                    boundaries=self.ewt_boundaries[i],
+                ewt = _ewt_with_boundaries(
+                    processed[:, i], self.ewt_boundaries[i]
                 )
                 if self.detrend:
                     processed[:, i] -= ewt[:, self.trend_imf_idx]
