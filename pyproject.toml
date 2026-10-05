@@ -30,6 +30,7 @@ ml = [
 [dependency-groups]
 dev = [
     "nbconvert>=7.17.1",
+    "pytest>=8.4.2",
     "ruff>=0.16.7",
 ]
 plot = [
@@ -52,3 +53,8 @@ line-length = 79
 preview = true
 select = ['I', 'F', 'E', 'W', 'PL', 'PT']
 ignore = ['E402', 'F811']
+
+[tool.ruff.lint.pylint]
+# Model constructors carry one argument per hyperparameter; they are
+# keyword-only past the geometry, so call sites stay explicit.
+max-args = 12
