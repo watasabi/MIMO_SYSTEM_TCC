@@ -7,6 +7,7 @@ O `README.md` na raiz do projeto é a porta de entrada (visão geral, setup, con
 - `architecture.md` — decisões de arquitetura e desenho do pipeline
 - `data_dictionary.md` — dicionário de dados (colunas, tipos, origem)
 - `decisions.md` — registro de decisões técnicas (ADRs)
+- `2_split_artigo_vs_dataset_completo.md` — recorte do artigo vs. dataset completo e splits gerados
 - `uv_subprojects.md` — como usar UV sub-projects para isolar dependências
 
 Não há uma estrutura obrigatória: adicione arquivos `.md` conforme o projeto precisar, mantendo nomes curtos e em `snake_case`.
