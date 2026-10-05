@@ -212,14 +212,72 @@ Correção em `src`: `TimeSeriesPreprocessor.transform` com EWT quebrava
 de Meyer com as fronteiras do treino; `tests/test_preprocessors.py`
 verifica que `transform` reproduz `fit_transform` nos mesmos dados.
 
-## 9. Como reproduzir
+## 10. Todas as arquiteturas vs. ARMAX/MOGWO (split 70/15/15)
+
+`notebooks/training/04_arquiteturas_vs_armax.ipynb` treina as quatro
+arquiteturas de `src/mimo_sys/architectures/` (`MPNNForecaster`,
+`SymbolicGraphNetwork`, `StemGNN`, `Seq2SeqLatentGNN`; ver
+[`architectures/README.md`](../src/mimo_sys/architectures/README.md))
+no mesmo split 70/15/15, mesma janela (`INPUT_WINDOW=24`,
+`OUTPUT_WINDOW=12`) e mesmo protocolo de avaliação da seção 7, e junta
+o resultado ao `Seq2SeqAttention` (seção 7) e ao ARMAX/MOGWO. Todas as
+arquiteturas usam `hidden_size=64`; `MPNN` e `SymbolicGraphNetwork` usam
+`message_dim=8` (maior que o default 2, pensado para extração
+simbólica — aqui o objetivo é só acurácia).
+
+Cada arquitetura foi treinada em um **processo separado**
+(`uv run --extra ml python train_single.py <nome>`, script fora do
+repositório): treinar as quatro em sequência num mesmo processo
+esgotava a RAM da máquina de desenvolvimento (7,7 GB). O notebook
+carrega os pesos já salvos em `models/<nome>_70_15_15.pth` em vez de
+retreinar.
+
+R² no teste (12 passos, forecast encadeado):
+
+| Modelo | R² vazão | R² nível | R² pressão | Época de parada |
+|---|---|---|---|---|
+| ARMAX 1 passo | 0,915 | 0,932 | 0,671 | — |
+| ARMAX 12 passos | 0,570 | 0,293 | 0,148 | — |
+| Seq2SeqAttention | 0,877 | 0,435 | 0,653 | 47 |
+| MPNN | 0,909 | 0,248 | 0,667 | 71 |
+| **SymbolicGraphNetwork** | **0,915** | 0,260 | **0,693** | 103 |
+| StemGNN | 0,889 | **0,386** | 0,594 | 186 |
+| Seq2SeqLatentGNN | 0,875 | 0,304 | 0,633 | 135 |
+
+Leitura:
+
+1. Todas as cinco redes superam o ARMAX de 12 passos nas três saídas,
+   confirmando o padrão da seção 7 com mais arquiteturas.
+2. Nenhuma rede chega perto do ARMAX de 1 passo — esperado, já que ele
+   usa `y` medido a cada passo e as redes fazem forecast livre de 12
+   passos. Não é uma comparação justa, só um teto de referência.
+3. `SymbolicGraphNetwork` tem a melhor vazão e pressão entre as redes,
+   e é **destilável** (mensagem de 8 dimensões, arquitetura pensada
+   para extração simbólica — ver `architectures/README.md`). É a
+   melhor combinação de acurácia e interpretabilidade encontrada até
+   aqui.
+4. `StemGNN` é o único a melhorar o nível (R² 0,386) mas o pior em
+   vazão e pressão; não é destilável (opera em base espectral).
+5. `Seq2SeqAttention`, a rede mais simples (sem grafo, só LSTM com
+   attention), fica no meio do pacote — não é a pior nem a melhor em
+   nenhuma saída.
+6. Limites: um seed por arquitetura, sem tuning de hiperparâmetros
+   (`hidden_size=64` fixo em todas), e `message_dim=8` em vez do
+   default 2 do `MPNN`/`SymbolicGraphNetwork` não foi comparado contra
+   o default nesta rodada.
+
+## 11. Como reproduzir
 
 ```bash
 cd notebooks/processing && uv run python 03_full_dataset_sample.py
 cd ../training && uv run jupyter nbconvert --to notebook --execute \
     --inplace 02_seq2seq_attention_splits_vs_armax.ipynb
 # Preprocessor (precisa dos extras ml e do grupo plot):
-uv run --extra ml --group plot jupyter nbconvert --to notebook --execute \\
+uv run --extra ml --group plot jupyter nbconvert --to notebook --execute \
     --inplace 03_seq2seq_attention_preprocessor.ipynb
+# Todas as arquiteturas (treine cada uma em processo separado se a
+# máquina tiver pouca RAM; ver nota na seção 10):
+uv run --extra ml --group plot jupyter nbconvert --to notebook --execute \
+    --inplace 04_arquiteturas_vs_armax.ipynb
 # EDA: notebooks/eda/02_split_vs_dataset_completo.ipynb
 ```
