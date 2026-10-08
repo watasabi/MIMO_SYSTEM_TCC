@@ -28,6 +28,12 @@ ml = [
     "torch>=2.14.0",
     "torchmetrics>=1.9.0",
 ]
+symbolic = [
+    "pysr>=0.19",
+]
+explain = [
+    "torch-geometric>=2.6",
+]
 
 [dependency-groups]
 dev = [
