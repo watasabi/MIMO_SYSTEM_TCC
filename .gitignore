@@ -8,16 +8,9 @@ env/
 config/.env
 .env
 
-# Data
-data/external/*
-data/interim/*
-data/processed/*
-data/raw/*
-!data/raw/.gitkeep
-
-# Models (artefatos, binários)
-models/*
-!models/.gitkeep
+# Data (arquivos acima do limite de 100MB do GitHub)
+data/raw/WRSO and NSWRSO_draft_all.zip
+data/raw/WRSO and NSWRSO_draft_all/Multi_objective_algorithms.zip
 
 # Jupyter
 .ipynb_checkpoints
