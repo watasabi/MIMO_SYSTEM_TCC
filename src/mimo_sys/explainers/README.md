@@ -555,9 +555,9 @@ ground truth is wrong: on evaluating GNN explanation methods. In:
 **ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD)**,
 2021.
 
-[10] Symbolic Graph Networks for robust PDE discovery from noisy sparse
-data. **arXiv preprint** arXiv:2603.22380, 2026. (Autores: conferir no
-PDF em `docs/pappers/SymbolicGraphNetworks_2026.pdf`.)
+[10] CHEN, X.; AN, J.; GUO, J.; ZHOU, Y. Symbolic graph networks for
+robust PDE discovery from noisy sparse data. **arXiv preprint**
+arXiv:2603.22380, 2026.
 
 [11] GILMER, J. et al. Neural message passing for quantum chemistry.
 In: **International Conference on Machine Learning (ICML)**, 2017.
