@@ -522,6 +522,18 @@ wheels = [
 ]
 
 [[package]]
+name = "colorlog"
+version = "6.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8c/55/ba79756cb90c8d69d599d57785398ac87bba7b19c80e87f4e8a562197c93/colorlog-6.12.0.tar.gz", hash = "sha256:2a7924c1dadf18b22a0eb8b06d1c7b01d5341707ec1641eb6fcc4fde0c3e8e5f", size = 18151, upload-time = "2026-07-23T13:40:40.71Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d4/19/0b6647bf5e331521e55d2b63bfbdc210bd9cd605189273f03614a05f702d/colorlog-6.12.0-py3-none-any.whl", hash = "sha256:30d392604e9110045a2c2aeefc27d7a017abbab63f3a8aee594eac0801df784e", size = 12239, upload-time = "2026-07-23T13:40:39.562Z" },
+]
+
+[[package]]
 name = "comm"
 version = "0.2.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1778,6 +1790,10 @@ ml = [
 symbolic = [
     { name = "pysr" },
 ]
+tune = [
+    { name = "optuna" },
+    { name = "optuna-integration", extra = ["pytorch-lightning"] },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1801,6 +1817,8 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "mlflow", marker = "extra == 'ml'", specifier = ">=3.16.1" },
     { name = "openpyxl", specifier = ">=3.1.5" },
+    { name = "optuna", marker = "extra == 'tune'", specifier = ">=5.0.0" },
+    { name = "optuna-integration", extras = ["pytorch-lightning"], marker = "extra == 'tune'", specifier = ">=5.0.0" },
     { name = "pandas", specifier = ">=3.0.5" },
     { name = "pyarrow", specifier = ">=25.0.1" },
     { name = "pysr", marker = "extra == 'symbolic'", specifier = ">=0.19" },
@@ -1812,7 +1830,7 @@ requires-dist = [
     { name = "torchmetrics", marker = "extra == 'ml'", specifier = ">=1.9.0" },
     { name = "xlrd", specifier = ">=2.0.2" },
 ]
-provides-extras = ["dev", "ml", "symbolic", "explain"]
+provides-extras = ["dev", "ml", "symbolic", "explain", "tune"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2432,6 +2450,41 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2e/21/910f085c0b83b80e45c341c7859baef37c877046b2c44c88d5ff2d5db948/opentelemetry_semantic_conventions-0.66b0.tar.gz", hash = "sha256:97a77dce484c54861e7eeff7651fd8a806dd3c30e501dc316730215ec36890e6", size = 150247, upload-time = "2026-09-25T12:32:44.827Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f4/93/2ad416d69c4ca8fd21ebc6894f23f4eda744dc6f43a14d7a9ffd7ed3abbd/opentelemetry_semantic_conventions-0.66b0-py3-none-any.whl", hash = "sha256:175b19dd98c4473f4f43a2b1df59186fd7b4a48cd3f77cbe03438b6d6fda230a", size = 206277, upload-time = "2026-09-25T12:32:26.484Z" },
+]
+
+[[package]]
+name = "optuna"
+version = "5.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "alembic" },
+    { name = "colorlog" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pyyaml" },
+    { name = "sqlalchemy" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/27/6d/7bd33b5ed3a83f1c1517fb20c54c7dbf59e6c76430d9b26d3205074ff6b0/optuna-5.0.0.tar.gz", hash = "sha256:358bb878b7b1e20e90dc944ac4261796dd3d5c2b7860aa960a08fc10e0b5beff", size = 508726, upload-time = "2026-09-07T05:16:21.136Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/90/e5/7c5e8cdda8c9f0cd8aca0a376dee9cff6b8c30692cf614960d9e80f59689/optuna-5.0.0-py3-none-any.whl", hash = "sha256:5fff892ae6baf4948c810c5b8635ec67e08efb0709b41cb73b14e30391d44720", size = 442352, upload-time = "2026-09-07T05:16:19.943Z" },
+]
+
+[[package]]
+name = "optuna-integration"
+version = "5.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "optuna" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b0/80/11da348a0cf62e7e4561508215e79bc44f2e7e96e15c810e373f687346b0/optuna_integration-5.0.0.tar.gz", hash = "sha256:d32d099a37c3d4c8376d10676e67f789429b4489ada70eacdeefa4350499a89e", size = 79666, upload-time = "2026-09-07T05:05:28.946Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fc/2e/05051341d6b86652292a32f8b413d334aa337f78d58d4099f78a47ff5a60/optuna_integration-5.0.0-py3-none-any.whl", hash = "sha256:598247471d44553c98665ce96dc7d9e6534bb8b2ef38273197f76bdf916e5e2a", size = 88158, upload-time = "2026-09-07T05:05:27.663Z" },
+]
+
+[package.optional-dependencies]
+pytorch-lightning = [
+    { name = "lightning" },
 ]
 
 [[package]]

@@ -34,6 +34,10 @@ symbolic = [
 explain = [
     "torch-geometric>=2.6",
 ]
+tune = [
+    "optuna>=5.0.0",
+    "optuna-integration[pytorch-lightning]>=5.0.0",
+]
 
 [dependency-groups]
 dev = [

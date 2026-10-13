@@ -44,7 +44,6 @@ from collection_common import (
     plot_series,
     plot_spectrum,
 )
-from sklearn.preprocessing import MinMaxScaler
 from torch import nn
 
 from mimo_sys.architectures import (
@@ -53,6 +52,8 @@ from mimo_sys.architectures import (
     StemGNN,
     SymbolicGraphNetwork,
 )
+from mimo_sys.preprocessors import TimeSeriesPreprocessor
+from mimo_sys.training import BASELINE_PREPROCESSOR
 
 torch.manual_seed(SEED)
 np.random.seed(SEED)
@@ -76,8 +77,14 @@ full_df = pd.concat(splits.values(), ignore_index=True)
 full_raw = full_df[FEATURE_COLS].to_numpy()
 TRAIN_END = len(splits["train"])
 VAL_END = TRAIN_END + len(splits["val"])
-scaler = MinMaxScaler().fit(full_raw[:TRAIN_END])
-scaled = scaler.transform(full_raw)
+preprocessor = TimeSeriesPreprocessor(
+    window_size=INPUT_WINDOW,
+    horizon=OUTPUT_WINDOW,
+    plot=False,
+    **BASELINE_PREPROCESSOR,
+)
+preprocessor.fit_transform(full_raw[:TRAIN_END])
+scaled = preprocessor.transform_series(full_raw)
 
 # ---------------------------------------------- ARMAX/MOGWO publicado
 
@@ -321,8 +328,8 @@ with mlflow.start_run(run_name=PARENT_RUN) as parent:
                 seq_first = kind == "net_seq_first"
                 y_pred = chained_forecast(
                     obj,
-                    scaled,
-                    scaler,
+                    full_raw,
+                    preprocessor,
                     VAL_END,
                     len(full_raw),
                     device,

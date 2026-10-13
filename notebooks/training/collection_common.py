@@ -4,7 +4,8 @@ Usado por `05_collection_models_v1.py` (split 70/15/15, pesos já
 treinados) e `06_collection_models_kfold.py` (TimeSeriesSplit, treina
 um modelo por fold). Mantém num só lugar o contrato de avaliação —
 forecast encadeado de `OUTPUT_WINDOW` passos na escala original — e as
-figuras registradas no MLflow.
+figuras registradas no MLflow. Constantes, métricas e o forecast
+encadeado vêm de `mimo_sys.training`; aqui ficam só plots e logging.
 
 As figuras são logadas como **PNG** via `mlflow.log_figure`, porque a UI
 do MLflow mostra PNG inline mas serve HTML como texto cru/download — o
@@ -21,31 +22,27 @@ import pandas as pd
 import plotly.graph_objects as go
 import torch
 from plotly.subplots import make_subplots
-from torch import nn
 
-INPUT_COLS = ["freq_b1", "freq_b2", "freq_b3", "vazao_entrada"]
-OUTPUT_COLS = ["vazao_distribuicao", "nivel_res", "pressao"]
-FEATURE_COLS = INPUT_COLS + OUTPUT_COLS
-N_NODES = len(FEATURE_COLS)
-TARGET_IDX = [FEATURE_COLS.index(c) for c in OUTPUT_COLS]
-N_TARGETS = len(TARGET_IDX)
+from mimo_sys.training.data import (  # noqa: F401 - reexport p/ os scripts
+    FEATURE_COLS,
+    INPUT_COLS,
+    INPUT_WINDOW,
+    N_NODES,
+    N_TARGETS,
+    OUTPUT_COLS,
+    OUTPUT_WINDOW,
+    SEED,
+    TARGET_IDX,
+)
+from mimo_sys.training.evaluation import (  # noqa: F401
+    BANDS,
+    amplitude_spectrum,
+    band_table,
+    chained_forecast,
+    metrics_table,
+)
+
 LABELS = ["Vazão de distribuição (l/s)", "Nível (m)", "Pressão (mca)"]
-
-INPUT_WINDOW = 24
-OUTPUT_WINDOW = 12
-SEED = 42
-
-# Bandas ancoradas na EDA (`docs/5_eda-series-temporais.md` §7): pico
-# diário em ~24h, segundo harmônico em ~12h.
-# Nomes restritos a alfanumérico/underscore/traço: o MLflow rejeita
-# `>` e `+` em nome de métrica.
-BANDS = [
-    ("tendencia_acima_32h", 32.0, np.inf),
-    ("diario_16-32h", 16.0, 32.0),
-    ("harmonico_8-16h", 8.0, 16.0),
-    ("curto_4-8h", 4.0, 8.0),
-    ("ruido_2-4h", 2.0, 4.0),
-]
 
 PLOT_W, PLOT_H = 1100, 760
 
@@ -58,66 +55,6 @@ try:
     pio.defaults.timeout = 120
 except Exception:  # noqa: BLE001 - só um ajuste de robustez
     pass
-
-
-# ------------------------------------------------------------ métricas
-
-
-def metrics_table(y_true: np.ndarray, y_pred: np.ndarray) -> pd.DataFrame:
-    """MSE, MAE, R² e SMAPE por saída."""
-    err = y_true - y_pred
-    ss_tot = ((y_true - y_true.mean(axis=0)) ** 2).sum(axis=0)
-    smape = 100 * np.mean(
-        2 * np.abs(err) / (np.abs(y_true) + np.abs(y_pred) + 1e-12), axis=0
-    )
-    return pd.DataFrame(
-        {
-            "mse": (err**2).mean(axis=0),
-            "mae": np.abs(err).mean(axis=0),
-            "r2": 1 - (err**2).sum(axis=0) / ss_tot,
-            "smape_%": smape,
-        },
-        index=OUTPUT_COLS,
-    )
-
-
-def amplitude_spectrum(x: np.ndarray) -> np.ndarray:
-    """Espectro de amplitude unilateral, `(n_freqs, n_saidas)`."""
-    return np.abs(np.fft.rfft(x, axis=0)) * 2.0 / len(x)
-
-
-def band_table(y_true: np.ndarray, y_pred: np.ndarray) -> pd.DataFrame:
-    """MSE/SMAPE espectral e erro de energia por banda e por saída."""
-    n = len(y_true)
-    freqs = np.fft.rfftfreq(n, d=1.0)
-    period = np.divide(
-        1.0, freqs, out=np.full_like(freqs, np.inf), where=freqs > 0
-    )
-    amp_true, amp_pred = amplitude_spectrum(y_true), amplitude_spectrum(y_pred)
-    rows = []
-    for name, lo, hi in BANDS:
-        mask = (period >= lo) & (period < hi)
-        if not mask.any():
-            continue
-        at, ap = amp_true[mask], amp_pred[mask]
-        for j, out in enumerate(OUTPUT_COLS):
-            e_true = (at[:, j] ** 2).sum()
-            e_pred = (ap[:, j] ** 2).sum()
-            rows.append(
-                {
-                    "banda": name,
-                    "saida": out,
-                    "mse_espectral": ((ap[:, j] - at[:, j]) ** 2).mean(),
-                    "smape_espectral_%": 100
-                    * np.mean(
-                        2
-                        * np.abs(ap[:, j] - at[:, j])
-                        / (np.abs(at[:, j]) + np.abs(ap[:, j]) + 1e-12)
-                    ),
-                    "energia_rel_%": 100 * (e_pred - e_true) / e_true,
-                }
-            )
-    return pd.DataFrame(rows).set_index(["banda", "saida"])
 
 
 # --------------------------------------------------------------- plots
@@ -436,32 +373,3 @@ def log_attention(model, window: torch.Tensor, name, figures_dir) -> None:
             plot_node_attention(nodes, name), "attention_nos", figures_dir
         )
         mlflow.set_tag("attention_nos", "sim")
-
-
-# ------------------------------------------------------------ forecast
-
-
-def chained_forecast(
-    model: nn.Module,
-    series_scaled: np.ndarray,
-    scaler,
-    start: int,
-    stop: int,
-    device,
-    seq_first: bool = False,
-) -> np.ndarray:
-    """Forecast encadeado de `OUTPUT_WINDOW` passos, escala original."""
-    preds = []
-    for t0 in range(start, stop - OUTPUT_WINDOW + 1, OUTPUT_WINDOW):
-        window = torch.FloatTensor(series_scaled[t0 - INPUT_WINDOW : t0])
-        window = (
-            window.unsqueeze(1) if seq_first else window.unsqueeze(0)
-        ).to(device)
-        with torch.no_grad():
-            out = model(window)
-        out = out.squeeze(1) if seq_first else out.squeeze(0)
-        preds.append(out.cpu().numpy())
-    preds = np.concatenate(preds)
-    return (
-        preds * scaler.data_range_[TARGET_IDX] + scaler.data_min_[TARGET_IDX]
-    )
