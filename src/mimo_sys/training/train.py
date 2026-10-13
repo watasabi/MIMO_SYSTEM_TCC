@@ -99,12 +99,26 @@ BASELINE_PREPROCESSOR: dict[str, Any] = {
 }
 
 
-def build_model(name: str, **kwargs: Any) -> nn.Module:
-    """Instantiate an architecture with the project geometry."""
+def build_model(
+    name: str,
+    input_window: int = INPUT_WINDOW,
+    output_window: int = OUTPUT_WINDOW,
+    **kwargs: Any,
+) -> nn.Module:
+    """Instantiate an architecture with the project geometry.
+
+    Args:
+        input_window: Lag window. The symbolic-regression route
+            (`MPNNForecaster`/`SymbolicGraphNetwork` + `message_l1`)
+            needs this small (e.g. 3): `message_fn` sees
+            `2 * input_window` scalars, and the search degrades past a
+            handful — see `docs/4_rotas-de-extracao.md`.
+        output_window: Forecast horizon.
+    """
     geometry = {
         "n_nodes": N_NODES,
-        "input_window": INPUT_WINDOW,
-        "output_window": OUTPUT_WINDOW,
+        "input_window": input_window,
+        "output_window": output_window,
         "target_idx": TARGET_IDX,
     }
     return ARCHITECTURES[name](**geometry, **kwargs)
@@ -116,6 +130,8 @@ class TrainConfig:
 
     model: str = "seq2seq_latent_gnn"
     model_kwargs: dict[str, Any] = field(default_factory=dict)
+    input_window: int = INPUT_WINDOW
+    output_window: int = OUTPUT_WINDOW
     preprocessor: dict[str, Any] = field(
         default_factory=lambda: dict(BASELINE_PREPROCESSOR)
     )
@@ -195,12 +211,12 @@ def _windows(
 ) -> tuple[TimeSeriesPreprocessor, dict, npt.NDArray, npt.NDArray]:
     """Fit the preprocessor on train; window val/test with train context.
 
-    Val/test segments start `INPUT_WINDOW` rows early so their first
-    target is the first row of the split.
+    Val/test segments start `cfg.input_window` rows early so their
+    first target is the first row of the split.
     """
     pp = TimeSeriesPreprocessor(
-        window_size=INPUT_WINDOW,
-        horizon=OUTPUT_WINDOW,
+        window_size=cfg.input_window,
+        horizon=cfg.output_window,
         plot=False,
         **cfg.preprocessor,
     )
@@ -208,8 +224,8 @@ def _windows(
     raw = np.concatenate([splits["train"], splits["val"], splits["test"]])
     train_end = len(splits["train"])
     val_end = train_end + len(splits["val"])
-    val_seg = raw[train_end - INPUT_WINDOW : val_end]
-    test_seg = raw[val_end - INPUT_WINDOW :]
+    val_seg = raw[train_end - cfg.input_window : val_end]
+    test_seg = raw[val_end - cfg.input_window :]
     windows = {"train": (X_tr, y_tr)}
     for name, seg in (("val", val_seg), ("test", test_seg)):
         X, y = pp.transform(seg)
@@ -227,7 +243,9 @@ def train(  # noqa: PLR0914, PLR0915 - linear on purpose
     pp, windows, test_seg, train_targets = _windows(cfg, splits)
     loaders = make_loaders(windows, cfg.batch_size)
 
-    model = build_model(cfg.model, **cfg.model_kwargs)
+    model = build_model(
+        cfg.model, cfg.input_window, cfg.output_window, **cfg.model_kwargs
+    )
     if cfg.revin:
         model = RevINWrapper(model, N_NODES, TARGET_IDX, mode=cfg.revin)
 
@@ -320,11 +338,13 @@ def train(  # noqa: PLR0914, PLR0915 - linear on purpose
             module.model,
             test_seg,
             pp,
-            start=INPUT_WINDOW,
+            start=cfg.input_window,
             stop=len(test_seg),
             device=module.device,
+            input_window=cfg.input_window,
+            output_window=cfg.output_window,
         )
-        y_true = test_seg[INPUT_WINDOW : INPUT_WINDOW + len(y_pred)][
+        y_true = test_seg[cfg.input_window : cfg.input_window + len(y_pred)][
             :, TARGET_IDX
         ]
         metrics = metrics_table(y_true, y_pred)

@@ -98,19 +98,23 @@ def chained_forecast(
     stop: int,
     device: torch.device | str = "cpu",
     seq_first: bool = False,
+    input_window: int = INPUT_WINDOW,
+    output_window: int = OUTPUT_WINDOW,
 ) -> npt.NDArray:
-    """Chained `OUTPUT_WINDOW`-step forecast in the original scale.
+    """Chained `output_window`-step forecast in the original scale.
 
     Args:
         model: Forecaster with the shared contract (or sequence-first
             when `seq_first`), already in eval mode.
         raw: Raw `(n_rows, n_nodes)` series covering `start -
-            INPUT_WINDOW` to `stop`.
+            input_window` to `stop`.
         preprocessor: Fitted on the training rows only.
         start: Row of the first forecast step.
         stop: One past the last row that can be forecast.
         device: Where to run the model.
         seq_first: Model takes `(window, batch, nodes)`.
+        input_window: Lag window the model was trained with.
+        output_window: Forecast horizon the model was trained with.
 
     Returns:
         `(n_steps, n_targets)` predictions for rows
@@ -118,13 +122,13 @@ def chained_forecast(
         `inverse_transform(..., reference=raw)`.
     """
     series = preprocessor.transform_series(raw)
-    anchors = np.arange(start, stop - OUTPUT_WINDOW + 1, OUTPUT_WINDOW)
+    anchors = np.arange(start, stop - output_window + 1, output_window)
     outs = []
     # One window per call: StemGNN aggregates its adjacency over the
     # batch, so batching windows would change its forecasts.
     for t0 in anchors:
         window = torch.as_tensor(
-            series[t0 - INPUT_WINDOW : t0], dtype=torch.float32
+            series[t0 - input_window : t0], dtype=torch.float32
         ).to(device)
         with torch.no_grad():
             if seq_first:
