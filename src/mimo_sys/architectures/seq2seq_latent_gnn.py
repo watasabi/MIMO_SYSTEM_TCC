@@ -225,6 +225,22 @@ class Seq2SeqLatentGNN(nn.Module):
         self.output_window = output_window
         self.n_targets = n_targets
 
+    def _encode(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        nodes_first = x.transpose(1, 2)  # [batch, nodes, window]
+        filtered = self.fourier(nodes_first)
+        correlated = self.gcn(filtered)
+        return self.encoder(correlated.transpose(1, 2))
+
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        """Encoder states `(batch, input_window, hidden_size)`."""
+        return self._encode(x)[0]
+
+    def encoder_modules(self) -> list[nn.Module]:
+        """Modules behind `encode`, for pretraining/freezing."""
+        return [self.fourier, self.gcn, self.encoder]
+
     def forward(
         self,
         x: torch.Tensor,
@@ -246,10 +262,7 @@ class Seq2SeqLatentGNN(nn.Module):
         if teacher_forcing_ratio > 0.0 and target is None:
             raise ValueError("teacher forcing needs target")
 
-        nodes_first = x.transpose(1, 2)  # [batch, nodes, window]
-        filtered = self.fourier(nodes_first)
-        correlated = self.gcn(filtered)
-        encoded, (hidden, cell) = self.encoder(correlated.transpose(1, 2))
+        encoded, (hidden, cell) = self._encode(x)
 
         step = x[:, -1:, :].index_select(2, self.target_idx)
         outputs = []

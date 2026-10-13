@@ -30,6 +30,10 @@ def _mlp(in_dim: int, hidden: int, out_dim: int) -> nn.Sequential:
     )
 
 
+# encode() needs a layer before the last one.
+MIN_ENCODER_LAYERS = 2
+
+
 class MPNNForecaster(nn.Module):
     """Fully-connected MPNN over the system variables.
 
@@ -155,6 +159,22 @@ class MPNNForecaster(nn.Module):
         for previous in range(layer):
             _, _, h = self._pass(h, previous)
         return h
+
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        """Node features entering the last layer, `(batch, nodes, dim)`.
+
+        Needs `n_layers >= 2`: with one layer the "encoder" is the raw
+        window and there is nothing to pretrain.
+        """
+        if self.n_layers < MIN_ENCODER_LAYERS:
+            raise ValueError("encode() needs n_layers >= 2")
+        return self._features_at(x, self.n_layers - 1)
+
+    def encoder_modules(self) -> list[nn.Module]:
+        """Message/update MLPs of all but the last layer."""
+        if self.n_layers < MIN_ENCODER_LAYERS:
+            raise ValueError("encoder_modules() needs n_layers >= 2")
+        return [*self.message_fn[:-1], *self.update_fn[:-1]]
 
     def message_l1(self) -> torch.Tensor:
         """Mean absolute message of the last forward pass.

@@ -16,8 +16,14 @@ from ewtpy import EWT1D, EWT_Meyer_FilterBank
 from scipy.signal import savgol_filter
 from sklearn.impute import KNNImputer
 from sklearn.neighbors import LocalOutlierFactor
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 
+ScalerType = Literal["standard", "minmax", "robust"]
+SCALERS = {
+    "standard": StandardScaler,
+    "minmax": MinMaxScaler,
+    "robust": RobustScaler,
+}
 OutlierMethod = Literal[
     "iqr", "zscore", "mad", "quantile", "isolation_forest", "lof", "ecod"
 ]
@@ -75,8 +81,14 @@ class TimeSeriesPreprocessor:
         filter_window: int = 5,
         filter_polyorder: int = 2,
         apply_filter: bool = True,
+        scaler: ScalerType = "standard",
+        step_size: int = 1,
+        plot: bool = True,
     ) -> None:
         self.normalize = normalize
+        self.scaler_type = scaler
+        self.step_size = step_size
+        self.plot = plot
         self.differencing = differencing
         self.detrend = detrend
         self.apply_ewt = apply_ewt
@@ -94,7 +106,7 @@ class TimeSeriesPreprocessor:
         self.remove_outliers = remove_outliers
 
         # Fitted parameters
-        self.scaler: StandardScaler | None = None
+        self.scaler: StandardScaler | MinMaxScaler | RobustScaler | None = None
         self.log_offset: npt.NDArray | None = None
         self.diff_values: npt.NDArray | None = None
         self.pre_diff_values: npt.NDArray | None = None
@@ -169,7 +181,7 @@ class TimeSeriesPreprocessor:
             processed[0] = 0
 
         if self.normalize:
-            self.scaler = StandardScaler()
+            self.scaler = SCALERS[self.scaler_type]()
             processed = self.scaler.fit_transform(processed)
 
         if time_stamps is not None:
@@ -179,23 +191,24 @@ class TimeSeriesPreprocessor:
         return self._create_sequences(processed, feats) + (processed,)
 
     def transform(self, data: npt.NDArray) -> tuple[npt.NDArray, npt.NDArray]:
-        """Apply the same transformation as in fit_transform."""
+        """Apply the same transformation as in fit_transform.
+
+        Uses the parameters fitted on the training data (log offset, EWT
+        boundaries, scaler); step order matches `fit_transform`.
+        """
+        return self._create_sequences(self.transform_series(data))
+
+    def transform_series(self, data: npt.NDArray) -> npt.NDArray:
+        """Transformed series (no windowing), same steps as `transform`.
+
+        Useful for rolling/chained forecasts that slice their own
+        windows; invert the outputs with `inverse_transform(...,
+        reference=data)`.
+        """
         if self.normalize and self.scaler is None:
             raise ValueError("Scaler not fitted. Call fit_transform first.")
-        processed = data.copy()
-
-        if self.log_transform:
-            processed = np.log(processed + self.log_offset)
-
-        if self.apply_ewt:
-            if self.ewt_boundaries is None:
-                raise ValueError("EWT not fitted. Call fit_transform first.")
-            for i in range(processed.shape[1]):
-                ewt = _ewt_with_boundaries(
-                    processed[:, i], self.ewt_boundaries[i]
-                )
-                if self.detrend:
-                    processed[:, i] -= ewt[:, self.trend_imf_idx]
+        pre_diff, _ = self._pre_diff_state(data)
+        processed = pre_diff.copy()
 
         if self.differencing:
             processed[1:] = np.diff(processed, axis=0)
@@ -204,13 +217,55 @@ class TimeSeriesPreprocessor:
         if self.normalize:
             processed = self.scaler.transform(processed)
 
+        return processed
+
+    def _pre_diff_state(
+        self, data: npt.NDArray
+    ) -> tuple[npt.NDArray, npt.NDArray | None]:
+        """Run log/EWT-detrend/filter with fitted parameters.
+
+        Returns:
+            `(pre_diff_values, trend)` for `data`, in the same time index
+            as `data`; `trend` is None when not detrending.
+        """
+        processed = np.array(data, dtype=float, copy=True)
+
+        if self.log_transform:
+            processed = np.log(processed + self.log_offset)
+
+        trend = None
+        if self.apply_ewt:
+            if self.ewt_boundaries is None:
+                raise ValueError("EWT not fitted. Call fit_transform first.")
+            if self.detrend:
+                trend = np.zeros_like(processed)
+            for i in range(processed.shape[1]):
+                ewt = _ewt_with_boundaries(
+                    processed[:, i], self.ewt_boundaries[i]
+                )
+                if self.detrend:
+                    trend[:, i] = ewt[:, self.trend_imf_idx]
+                    processed[:, i] -= trend[:, i]
+
         if self.apply_filter:
             processed = self.adaptive_filter(processed)
 
-        return self._create_sequences(processed)
+        return processed, trend
 
-    def inverse_transform(
-        self, predictions: npt.NDArray, anchor_indices: npt.NDArray
+    def anchor_indices(self, n_windows: int) -> npt.NDArray:
+        """Row of the first predicted step of each window.
+
+        This is the `anchor_indices` argument of `inverse_transform`
+        for the windows returned by `fit_transform`/`transform`.
+        """
+        return np.arange(n_windows) * self.step_size + self.window_size
+
+    def inverse_transform(  # noqa: PLR0914
+        self,
+        predictions: npt.NDArray,
+        anchor_indices: npt.NDArray,
+        feats: Sequence[int] | None = None,
+        reference: npt.NDArray | None = None,
     ) -> npt.NDArray:
         """Invert a batch of predicted windows back to the original scale.
 
@@ -221,67 +276,79 @@ class TimeSeriesPreprocessor:
         are lossy and are not inverted.
 
         Args:
-            predictions: Array of shape (n_samples, horizon, n_features)
+            predictions: Array of shape (n_samples, horizon, n_cols)
                 with model outputs in the space returned by
                 `fit_transform`/`transform` (i.e. before the time
                 features that may have been concatenated).
             anchor_indices: 1D array of length n_samples. For sample k,
-                `anchor_indices[k]` is the row index, in the same time
-                index as `self.trend_component`/`self.pre_diff_values`
-                (i.e. right after EWT/detrend + filtering, before
-                differencing/normalize), of the first predicted step of
-                that window. For a window built as
-                `data[i : i + window_size]` -> `data[i + window_size : ...]`,
-                this is `i + window_size`.
+                `anchor_indices[k]` is the row of the first predicted
+                step of that window, in the time index of `reference`
+                (or of the data given to `fit_transform` when
+                `reference` is None). See `anchor_indices()`.
+            feats: Column indices (of the original data) that the
+                `n_cols` prediction columns correspond to, e.g. the
+                target columns. Defaults to all columns.
+            reference: Raw segment the windows were built from (the
+                array given to `transform`). When set, differencing and
+                detrend are undone with this segment's own values and
+                EWT trend, so the round trip is exact. When None, the
+                fitted (training) state is used and the trend is
+                linearly extrapolated past its end.
 
         Returns:
-            Array of shape (n_samples, horizon, n_features) in the
-            original data scale.
+            Array of shape (n_samples, horizon, n_cols) in the original
+            data scale.
         """
         predictions = np.asarray(predictions, dtype=float).copy()
         anchor_indices = np.asarray(anchor_indices)
-        n_samples, horizon, n_features = predictions.shape
+        n_samples, horizon, n_cols = predictions.shape
+        n_features = len(self.scaler.scale_) if self.scaler else n_cols
+        feats = list(range(n_cols)) if feats is None else list(feats)
+
+        if reference is not None:
+            pre_diff, trend = self._pre_diff_state(reference)
+        else:
+            pre_diff, trend = self.pre_diff_values, self.trend_component
 
         if self.normalize:
-            flat = predictions.reshape(-1, n_features)
-            predictions = self.scaler.inverse_transform(flat).reshape(
-                n_samples, horizon, n_features
-            )
+            # Scalers are per column: pad to full width, invert, select.
+            padded = np.zeros((n_samples * horizon, n_features))
+            padded[:, feats] = predictions.reshape(-1, n_cols)
+            predictions = (
+                self.scaler.inverse_transform(padded)[:, feats]
+            ).reshape(n_samples, horizon, n_cols)
 
         if self.differencing:
-            if self.pre_diff_values is None:
+            if pre_diff is None:
                 raise ValueError(
                     "pre_diff_values not fitted. Call fit_transform first."
                 )
-            # (n_samples, n_features)
-            base = self.pre_diff_values[anchor_indices - 1]
+            base = pre_diff[anchor_indices - 1][:, feats]
             predictions = base[:, None, :] + np.cumsum(predictions, axis=1)
 
-        if self.detrend and self.trend_component is not None:
-            trend_len = len(self.trend_component)
+        if self.detrend and trend is not None:
+            trend = trend[:, feats]
+            trend_len = len(trend)
             trend_to_add = np.zeros_like(predictions)
             for k, anchor in enumerate(anchor_indices):
                 end = anchor + horizon
                 if end <= trend_len:
-                    trend_to_add[k] = self.trend_component[anchor:end]
+                    trend_to_add[k] = trend[anchor:end]
                 else:
                     in_range = max(trend_len - anchor, 0)
                     if in_range > 0:
-                        trend_to_add[k, :in_range] = self.trend_component[
+                        trend_to_add[k, :in_range] = trend[
                             anchor : anchor + in_range
                         ]
                     tail = min(10, trend_len)
-                    slope = (
-                        self.trend_component[-1] - self.trend_component[-tail]
-                    ) / tail
-                    last_known = self.trend_component[-1]
+                    slope = (trend[-1] - trend[-tail]) / tail
                     for j in range(in_range, horizon):
                         steps_beyond = j - in_range + 1
-                        trend_to_add[k, j] = last_known + slope * steps_beyond
+                        trend_to_add[k, j] = trend[-1] + slope * steps_beyond
             predictions += trend_to_add
 
         if self.log_transform:
-            predictions = np.exp(predictions) - self.log_offset
+            predictions = np.exp(predictions) - self.log_offset[feats]
 
         return predictions
 
@@ -426,7 +493,8 @@ class TimeSeriesPreprocessor:
     ) -> tuple[npt.NDArray, npt.NDArray]:
         feats = list(range(data.shape[1])) if feats is None else feats
         X, y = [], []
-        for i in range(len(data) - self.window_size - self.horizon + 1):
+        last = len(data) - self.window_size - self.horizon + 1
+        for i in range(0, last, self.step_size):
             X.append(data[i : i + self.window_size])
             y.append(
                 data[
@@ -442,6 +510,8 @@ class TimeSeriesPreprocessor:
         title: str = "Preprocessing Comparison",
         time_stamps: Sequence | None = None,
     ) -> None:
+        if not self.plot:
+            return
         original = np.atleast_2d(original)
         cleaned = np.atleast_2d(cleaned)
         if original.shape[0] == 1:

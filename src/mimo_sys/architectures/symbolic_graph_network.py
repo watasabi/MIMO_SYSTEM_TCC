@@ -153,6 +153,14 @@ class SymbolicGraphNetwork(nn.Module):
         """Run the graph simulator and return the forecast."""
         return self.mpnn(self._prepare(x))
 
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        """Wrapped MPNN's `encode` on the smoothed window."""
+        return self.mpnn.encode(self.smoothing(x))
+
+    def encoder_modules(self) -> list[nn.Module]:
+        """Wrapped MPNN's encoder modules."""
+        return self.mpnn.encoder_modules()
+
     def message_l1(self) -> torch.Tensor:
         """Mean absolute message of the last forward pass."""
         return self.mpnn.message_l1()
