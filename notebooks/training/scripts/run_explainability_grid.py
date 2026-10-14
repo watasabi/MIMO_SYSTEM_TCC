@@ -64,8 +64,11 @@ VARIANTS = {
         "ema_decay": 0.999,
     },
 }
-# MPNN/SGN só têm encoder pretreinável com n_layers >= 2.
-NO_CONTRASTIVE = {"mpnn", "sgn"}
+# MPNN/SGN só têm encoder pretreinável com n_layers >= 2 (ver
+# encode() em mimo_sys.architectures); ambos usam n_layers=1 nesta
+# grade. StemGNN nunca expõe encode() (sem corte limpo de encoder —
+# ver src/mimo_sys/architectures/README.md), em qualquer configuração.
+NO_CONTRASTIVE = {"mpnn", "sgn", "stemgnn"}
 
 SCRIPT = """
 import json, sys
