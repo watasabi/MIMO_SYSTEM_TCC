@@ -4,24 +4,19 @@ Usado por `05_collection_models_v1.py` (split 70/15/15, pesos já
 treinados) e `06_collection_models_kfold.py` (TimeSeriesSplit, treina
 um modelo por fold). Mantém num só lugar o contrato de avaliação —
 forecast encadeado de `OUTPUT_WINDOW` passos na escala original — e as
-figuras registradas no MLflow. Constantes, métricas e o forecast
-encadeado vêm de `mimo_sys.training`; aqui ficam só plots e logging.
-
-As figuras são logadas como **PNG** via `mlflow.log_figure`, porque a UI
-do MLflow mostra PNG inline mas serve HTML como texto cru/download — o
-que torna o artefato inútil de olhar pela interface.
+figuras registradas no MLflow. Constantes, métricas, o forecast
+encadeado e os plots de série/espectro vêm de `mimo_sys.training`
+(`train()` os usa também); aqui ficam só os plots específicos de
+attention/resumo e o logging.
 """
 
 from __future__ import annotations
-
-from pathlib import Path
 
 import mlflow
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import torch
-from plotly.subplots import make_subplots
 
 from mimo_sys.training.data import (  # noqa: F401 - reexport p/ os scripts
     FEATURE_COLS,
@@ -36,118 +31,21 @@ from mimo_sys.training.data import (  # noqa: F401 - reexport p/ os scripts
 )
 from mimo_sys.training.evaluation import (  # noqa: F401
     BANDS,
+    PLOT_H,
+    PLOT_W,
     amplitude_spectrum,
     band_table,
     chained_forecast,
+    log_figure,
     metrics_table,
+    plot_series,
+    plot_spectrum,
 )
 
 LABELS = ["Vazão de distribuição (l/s)", "Nível (m)", "Pressão (mca)"]
 
-PLOT_W, PLOT_H = 1100, 760
-
-# O kaleido roda Chrome headless para gerar PNG e, em lote longo
-# (k-fold são dezenas de figuras), estoura o timeout default. Uma folga
-# maior troca velocidade por estabilidade.
-try:
-    import plotly.io as pio
-
-    pio.defaults.timeout = 120
-except Exception:  # noqa: BLE001 - só um ajuste de robustez
-    pass
-
 
 # --------------------------------------------------------------- plots
-
-
-def plot_series(y_true, y_pred, name, idx, table):
-    """Medido vs. previsto nas 3 saídas, com R²/SMAPE no subtítulo."""
-    titles = [
-        f"{LABELS[j]} — R² {table.loc[o, 'r2']:.3f}, "
-        f"SMAPE {table.loc[o, 'smape_%']:.1f}%"
-        for j, o in enumerate(OUTPUT_COLS)
-    ]
-    fig = make_subplots(rows=3, cols=1, subplot_titles=titles)
-    for i in range(3):
-        for label, arr, color in (
-            ("Medido", y_true, "black"),
-            (name, y_pred, "firebrick"),
-        ):
-            fig.add_trace(
-                go.Scatter(
-                    x=idx,
-                    y=arr[:, i],
-                    name=label,
-                    line=dict(color=color, width=1.2),
-                    legendgroup=label,
-                    showlegend=(i == 0),
-                ),
-                row=i + 1,
-                col=1,
-            )
-    fig.update_xaxes(title_text="amostra", row=3, col=1)
-    fig.update_layout(
-        title_text=f"{name} — medido vs. previsto",
-        height=PLOT_H,
-        width=PLOT_W,
-        template="plotly_white",
-    )
-    return fig
-
-
-def plot_spectrum(y_true, y_pred, name, bands):
-    """Espectro medido vs. previsto, pior banda destacada no subtítulo."""
-    n = len(y_true)
-    freqs = np.fft.rfftfreq(n, d=1.0)
-    period = np.divide(
-        1.0, freqs, out=np.full_like(freqs, np.inf), where=freqs > 0
-    )
-    amp_true, amp_pred = amplitude_spectrum(y_true), amplitude_spectrum(y_pred)
-    titles = []
-    for j, out in enumerate(OUTPUT_COLS):
-        sub = bands.xs(out, level="saida")
-        worst = sub["energia_rel_%"].abs().idxmax()
-        titles.append(
-            f"{LABELS[j]} — pior banda {worst}: "
-            f"{sub.loc[worst, 'energia_rel_%']:+.0f}% energia, "
-            f"SMAPE espectral {sub.loc[worst, 'smape_espectral_%']:.0f}%"
-        )
-    fig = make_subplots(rows=3, cols=1, subplot_titles=titles)
-    for i in range(3):
-        for label, amp, color in (
-            ("Medido", amp_true, "black"),
-            (name, amp_pred, "firebrick"),
-        ):
-            fig.add_trace(
-                go.Scatter(
-                    x=period[1:],
-                    y=amp[1:, i],
-                    name=label,
-                    line=dict(color=color, width=1.2),
-                    legendgroup=label,
-                    showlegend=(i == 0),
-                ),
-                row=i + 1,
-                col=1,
-            )
-        for mark in (12.0, 24.0):
-            fig.add_vline(
-                x=mark,
-                line=dict(color="gray", dash="dot", width=1),
-                row=i + 1,
-                col=1,
-            )
-    fig.update_xaxes(
-        type="log", autorange="reversed", title_text="período (h)"
-    )
-    fig.update_yaxes(type="log", title_text="amplitude")
-    fig.update_layout(
-        title_text=f"{name} — espectro (pontilhado: 12h e 24h)",
-        height=PLOT_H + 140,
-        width=PLOT_W,
-        template="plotly_white",
-    )
-    return fig
 
 
 def plot_lag_attention(weights, name):
@@ -252,28 +150,6 @@ def plot_band_heatmap(freq: pd.DataFrame, output: str, title: str):
         width=PLOT_W,
     )
     return fig
-
-
-def log_figure(fig, filename: str, figures_dir: Path) -> None:
-    """Loga o figure como PNG (visível na UI) e salva uma cópia local.
-
-    `mlflow.log_figure` com `.png` é o que a UI consegue pré-visualizar;
-    o HTML interativo vai junto, em `interativo/`, para abrir no
-    navegador quando precisar de zoom/hover.
-
-    O render de PNG passa pelo kaleido, que levanta `TimeoutError`
-    esporádico em lote longo. Como o HTML não depende dele, uma falha de
-    PNG não pode derrubar a corrida inteira — só registra o aviso.
-    """
-    try:
-        mlflow.log_figure(fig, f"{filename}.png")
-    except Exception as exc:  # noqa: BLE001 - kaleido é instável em lote
-        print(f"    [aviso] PNG de {filename} falhou ({type(exc).__name__})")
-        mlflow.set_tag(f"png_falhou__{filename}", type(exc).__name__)
-    html = figures_dir / f"{filename}.html"
-    html.parent.mkdir(parents=True, exist_ok=True)
-    fig.write_html(html, include_plotlyjs="cdn")
-    mlflow.log_artifact(str(html), artifact_path="interativo")
 
 
 def log_metrics_table(table: pd.DataFrame, bands: pd.DataFrame) -> None:

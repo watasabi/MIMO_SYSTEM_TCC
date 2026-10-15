@@ -76,7 +76,10 @@ from mimo_sys.training.data import (
 from mimo_sys.training.evaluation import (
     band_table,
     chained_forecast,
+    log_figure,
     metrics_table,
+    plot_series,
+    plot_spectrum,
 )
 from mimo_sys.training.forecaster import Forecaster, Scheduler
 from mimo_sys.training.losses import (
@@ -168,6 +171,7 @@ class TrainConfig:
     experiment: str = "mimo_sys_training"
     run_name: str | None = None
     save: bool = True
+    log_plots: bool = False
     accelerator: str = "auto"
     progress: bool = False
     data_prefix: str = "mimo_full_sample"
@@ -371,6 +375,16 @@ def train(  # noqa: PLR0914, PLR0915 - linear on purpose
         for (band, out), row in bands.iterrows():
             mlflow.log_metric(
                 f"energia_rel_pct_{band}_{out}", float(row["energia_rel_%"])
+            )
+
+        if cfg.log_plots:
+            idx = np.arange(len(y_pred))
+            log_figure(
+                plot_series(y_true, y_pred, run_name, idx, metrics),
+                "serie",
+            )
+            log_figure(
+                plot_spectrum(y_true, y_pred, run_name, bands), "espectro"
             )
 
         if cfg.save:

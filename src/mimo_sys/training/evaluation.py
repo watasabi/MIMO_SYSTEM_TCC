@@ -1,16 +1,23 @@
-"""Forecast evaluation in the original scale: metrics and spectral bands.
+"""Forecast evaluation in the original scale: metrics, bands, plots.
 
 The evaluation contract is the one of the collection experiments:
 chained forecast of `OUTPUT_WINDOW` steps over the test range,
-reconstructed with the preprocessor's `inverse_transform`.
+reconstructed with the preprocessor's `inverse_transform`. Plots are
+Plotly, logged as PNG (what the MLflow UI previews inline) plus an
+interactive HTML copy — see `log_figure`.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import mlflow
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import plotly.graph_objects as go
 import torch
+from plotly.subplots import make_subplots
 from torch import nn
 
 from mimo_sys.preprocessors import TimeSeriesPreprocessor
@@ -20,6 +27,19 @@ from mimo_sys.training.data import (
     OUTPUT_WINDOW,
     TARGET_IDX,
 )
+
+LABELS = ["Vazão de distribuição (l/s)", "Nível (m)", "Pressão (mca)"]
+PLOT_W, PLOT_H = 1100, 760
+
+# kaleido runs headless Chrome for PNG export and raises a sporadic
+# TimeoutError in long batches; a larger timeout trades speed for
+# stability.
+try:
+    import plotly.io as pio
+
+    pio.defaults.timeout = 120
+except Exception:  # noqa: BLE001 - best-effort robustness tweak
+    pass
 
 # Bands anchored on the EDA (`docs/5_eda-series-temporais.md` §7):
 # daily peak at ~24h, second harmonic at ~12h. Names avoid `>`/`+`,
@@ -140,3 +160,126 @@ def chained_forecast(
         np.stack(outs), anchors, feats=TARGET_IDX, reference=raw
     )
     return preds.reshape(-1, len(TARGET_IDX))
+
+
+def plot_series(
+    y_true: npt.NDArray,
+    y_pred: npt.NDArray,
+    name: str,
+    idx: npt.NDArray,
+    table: pd.DataFrame,
+) -> go.Figure:
+    """Measured vs. predicted on the 3 outputs, R²/SMAPE in subtitles."""
+    titles = [
+        f"{LABELS[j]} — R² {table.loc[o, 'r2']:.3f}, "
+        f"SMAPE {table.loc[o, 'smape_%']:.1f}%"
+        for j, o in enumerate(OUTPUT_COLS)
+    ]
+    fig = make_subplots(rows=3, cols=1, subplot_titles=titles)
+    for i in range(3):
+        for label, arr, color in (
+            ("Medido", y_true, "black"),
+            (name, y_pred, "firebrick"),
+        ):
+            fig.add_trace(
+                go.Scatter(
+                    x=idx,
+                    y=arr[:, i],
+                    name=label,
+                    line=dict(color=color, width=1.2),
+                    legendgroup=label,
+                    showlegend=(i == 0),
+                ),
+                row=i + 1,
+                col=1,
+            )
+    fig.update_xaxes(title_text="amostra", row=3, col=1)
+    fig.update_layout(
+        title_text=f"{name} — medido vs. previsto",
+        height=PLOT_H,
+        width=PLOT_W,
+        template="plotly_white",
+    )
+    return fig
+
+
+def plot_spectrum(
+    y_true: npt.NDArray, y_pred: npt.NDArray, name: str, bands: pd.DataFrame
+) -> go.Figure:
+    """Measured vs. predicted spectrum, worst band in the subtitle."""
+    n = len(y_true)
+    freqs = np.fft.rfftfreq(n, d=1.0)
+    period = np.divide(
+        1.0, freqs, out=np.full_like(freqs, np.inf), where=freqs > 0
+    )
+    amp_true, amp_pred = amplitude_spectrum(y_true), amplitude_spectrum(y_pred)
+    titles = []
+    for j, out in enumerate(OUTPUT_COLS):
+        sub = bands.xs(out, level="saida")
+        worst = sub["energia_rel_%"].abs().idxmax()
+        titles.append(
+            f"{LABELS[j]} — pior banda {worst}: "
+            f"{sub.loc[worst, 'energia_rel_%']:+.0f}% energia, "
+            f"SMAPE espectral {sub.loc[worst, 'smape_espectral_%']:.0f}%"
+        )
+    fig = make_subplots(rows=3, cols=1, subplot_titles=titles)
+    for i in range(3):
+        for label, amp, color in (
+            ("Medido", amp_true, "black"),
+            (name, amp_pred, "firebrick"),
+        ):
+            fig.add_trace(
+                go.Scatter(
+                    x=period[1:],
+                    y=amp[1:, i],
+                    name=label,
+                    line=dict(color=color, width=1.2),
+                    legendgroup=label,
+                    showlegend=(i == 0),
+                ),
+                row=i + 1,
+                col=1,
+            )
+        for mark in (12.0, 24.0):
+            fig.add_vline(
+                x=mark,
+                line=dict(color="gray", dash="dot", width=1),
+                row=i + 1,
+                col=1,
+            )
+    fig.update_xaxes(
+        type="log", autorange="reversed", title_text="período (h)"
+    )
+    fig.update_yaxes(type="log", title_text="amplitude")
+    fig.update_layout(
+        title_text=f"{name} — espectro (pontilhado: 12h e 24h)",
+        height=PLOT_H + 140,
+        width=PLOT_W,
+        template="plotly_white",
+    )
+    return fig
+
+
+def log_figure(
+    fig: go.Figure, filename: str, figures_dir: Path | None = None
+) -> None:
+    """Log `fig` as PNG (what the MLflow UI previews) plus HTML.
+
+    The interactive HTML goes under `interativo/` in the active run's
+    artifacts (and, if `figures_dir` is given, a local copy too), for
+    zoom/hover when the PNG isn't enough. PNG export goes through
+    kaleido, which is unstable in long batches — a failure there only
+    warns, it never aborts the run.
+    """
+    try:
+        mlflow.log_figure(fig, f"{filename}.png")
+    except Exception as exc:  # noqa: BLE001 - kaleido is flaky in batches
+        print(f"    [aviso] PNG de {filename} falhou ({type(exc).__name__})")
+        mlflow.set_tag(f"png_falhou__{filename}", type(exc).__name__)
+    if figures_dir is not None:
+        html = figures_dir / f"{filename}.html"
+        html.parent.mkdir(parents=True, exist_ok=True)
+        fig.write_html(html, include_plotlyjs="cdn")
+        mlflow.log_artifact(str(html), artifact_path="interativo")
+    else:
+        mlflow.log_figure(fig, f"interativo/{filename}.html")
