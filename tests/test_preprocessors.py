@@ -94,3 +94,23 @@ def test_step_size_reduz_janelas(series: np.ndarray) -> None:
     x1, _, _ = _pp(step_size=1).fit_transform(series)
     x5, _, _ = _pp(step_size=5).fit_transform(series)
     np.testing.assert_allclose(x5, x1[::5])
+
+
+def test_janela_de_entrada_nunca_inclui_o_alvo() -> None:
+    """Prova sem ambiguidade que X e y não se sobrepõem (sem leakage).
+
+    y1/y2/y3 passados entram como entrada (o sistema tem memória de si
+    mesmo), mas o próprio instante previsto nunca pode vazar para X.
+    Usa um índice de linha como "assinatura": se X contivesse qualquer
+    linha também presente em y, os conjuntos de índices se cruzariam.
+    """
+    n_rows, n_cols = 300, 3
+    tagged = np.tile(np.arange(n_rows, dtype=float)[:, None], (1, n_cols))
+    pp = _pp(step_size=5, normalize=False)
+    x_fit, y_fit, _ = pp.fit_transform(tagged)
+    for window, target in zip(x_fit, y_fit, strict=True):
+        x_rows = set(window[:, 0].tolist())
+        y_rows = set(target[:, 0].tolist())
+        assert x_rows.isdisjoint(y_rows)
+        # y começa exatamente 1 linha depois do último lag de x.
+        assert min(y_rows) == max(x_rows) + 1

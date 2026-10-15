@@ -11,6 +11,7 @@ import pytest
 import torch
 
 from mimo_sys.architectures import (
+    FourierGNN,
     MPNNForecaster,
     Seq2SeqLatentGNN,
     StemGNN,
@@ -47,6 +48,7 @@ def build(name: str, **overrides: int) -> torch.nn.Module:
         "stemgnn": StemGNN,
         "seq2seq": Seq2SeqLatentGNN,
         "sgn": SymbolicGraphNetwork,
+        "fourier_gnn": FourierGNN,
     }
     return builders[name](**kwargs)
 
@@ -58,7 +60,9 @@ def window() -> torch.Tensor:
     return torch.randn(BATCH, INPUT_WINDOW, N_NODES)
 
 
-@pytest.mark.parametrize("name", ["mpnn", "stemgnn", "seq2seq", "sgn"])
+@pytest.mark.parametrize(
+    "name", ["mpnn", "stemgnn", "seq2seq", "sgn", "fourier_gnn"]
+)
 def test_output_shape(name: str, window: torch.Tensor) -> None:
     torch.manual_seed(SEED)
     model = build(name).eval()
@@ -67,7 +71,9 @@ def test_output_shape(name: str, window: torch.Tensor) -> None:
     assert torch.isfinite(out).all()
 
 
-@pytest.mark.parametrize("name", ["mpnn", "stemgnn", "seq2seq", "sgn"])
+@pytest.mark.parametrize(
+    "name", ["mpnn", "stemgnn", "seq2seq", "sgn", "fourier_gnn"]
+)
 def test_seed_determinism(name: str, window: torch.Tensor) -> None:
     torch.manual_seed(SEED)
     first = build(name).eval()(window)
@@ -255,7 +261,9 @@ def test_sgn_rejects_negative_noise_scale() -> None:
         build("sgn", noise_scale=-1.0)
 
 
-@pytest.mark.parametrize("name", ["mpnn", "stemgnn", "seq2seq", "sgn"])
+@pytest.mark.parametrize(
+    "name", ["mpnn", "stemgnn", "seq2seq", "sgn", "fourier_gnn"]
+)
 def test_backward_reaches_every_parameter(
     name: str, window: torch.Tensor
 ) -> None:
@@ -278,3 +286,22 @@ def test_backward_reaches_every_parameter(
     (loss + auxiliary).backward()
     missing = [n for n, p in model.named_parameters() if p.grad is None]
     assert not missing, f"sem gradiente: {missing}"
+
+
+def test_fourier_gnn_edge_strength_shape_e_nao_negativo(
+    window: torch.Tensor,
+) -> None:
+    torch.manual_seed(SEED)
+    model = build("fourier_gnn").eval()
+    strength = model.edge_strength(window)
+    assert strength.shape == (N_NODES, N_NODES)
+    assert (strength >= 0).all()
+
+
+def test_fourier_gnn_n_invariant_fgo_e_parametro_unico_por_camada() -> None:
+    """A FGO n-invariante é (d, d), não cresce com input_window*n_nodes."""
+    torch.manual_seed(SEED)
+    model = build("fourier_gnn", embed_dim=8, n_layers=2)
+    for fgo in model.fgo_layers:
+        assert fgo.real.weight.shape == (8, 8)
+        assert fgo.imag.weight.shape == (8, 8)

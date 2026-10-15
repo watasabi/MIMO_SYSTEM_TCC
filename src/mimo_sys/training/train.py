@@ -40,6 +40,7 @@ from lightning.pytorch.callbacks import (
 from torch import nn
 
 from mimo_sys.architectures import (
+    FourierGNN,
     MPNNForecaster,
     Seq2SeqLatentGNN,
     StemGNN,
@@ -94,6 +95,7 @@ ARCHITECTURES: dict[str, type[nn.Module]] = {
     "sgn": SymbolicGraphNetwork,
     "stemgnn": StemGNN,
     "seq2seq_latent_gnn": Seq2SeqLatentGNN,
+    "fourier_gnn": FourierGNN,
 }
 
 # Baseline of notebooks 04/05: MinMax fitted on train, nothing else.
