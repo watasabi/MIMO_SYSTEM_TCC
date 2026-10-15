@@ -49,6 +49,10 @@ class Forecaster(L.LightningModule):
         max_epochs: Horizon of `cosine_warmup`/`onecycle`.
         augment: Training-only `(x, y) -> (x, y)` augmentation.
         spectral_weight: Weight of `SpectralLoss` (0 disables).
+        spectral_freq_weights: Optional per-frequency-bin weight for
+            `SpectralLoss` (see `losses.decaying_freq_weights`), to
+            tolerate error in the high frequencies instead of
+            penalising the whole spectrum equally.
         message_l1_weight: Weight of the message L1 of MPNN/SGN
             (Cranmer et al. use 1e-2; 0 disables).
         backcast_weight: Weight of `StemGNN.backcast_loss`; StemGNN's
@@ -57,7 +61,7 @@ class Forecaster(L.LightningModule):
             training.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913, PLR0917 - every knob is a config field
         self,
         model: nn.Module,
         loss: nn.Module | None = None,
@@ -68,16 +72,23 @@ class Forecaster(L.LightningModule):
         max_epochs: int = 200,
         augment: Callable[[torch.Tensor, torch.Tensor], Batch] | None = None,
         spectral_weight: float = 0.0,
+        spectral_freq_weights: torch.Tensor | None = None,
         message_l1_weight: float = 0.0,
         backcast_weight: float = 1.0,
         teacher_forcing_ratio: float = 0.0,
     ) -> None:
         super().__init__()
-        self.save_hyperparameters(ignore=["model", "loss", "augment"])
+        self.save_hyperparameters(
+            ignore=["model", "loss", "augment", "spectral_freq_weights"]
+        )
         self.model = model
         self.loss_fn = loss if loss is not None else nn.MSELoss()
         self.augment = augment
-        self.spectral = SpectralLoss() if spectral_weight > 0 else None
+        self.spectral = (
+            SpectralLoss(freq_weights=spectral_freq_weights)
+            if spectral_weight > 0
+            else None
+        )
         # One collection per stage: sharing state across stages mixes
         # their epoch aggregates.
         self.train_metrics = _stage_metrics()

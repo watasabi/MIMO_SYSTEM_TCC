@@ -79,7 +79,11 @@ from mimo_sys.training.evaluation import (
     metrics_table,
 )
 from mimo_sys.training.forecaster import Forecaster, Scheduler
-from mimo_sys.training.losses import build_loss, seasonal_naive_scale
+from mimo_sys.training.losses import (
+    build_loss,
+    decaying_freq_weights,
+    seasonal_naive_scale,
+)
 from mimo_sys.training.scalers import RevINMode, RevINWrapper
 
 ARCHITECTURES: dict[str, type[nn.Module]] = {
@@ -150,6 +154,8 @@ class TrainConfig:
     augment_p: float = 0.5
     mixup_alpha: float = 0.0
     spectral_weight: float = 0.0
+    spectral_cutoff_period: float | None = None
+    spectral_decay: float = 2.0
     message_l1_weight: float = 0.0
     backcast_weight: float = 1.0
     teacher_forcing_ratio: float = 0.0
@@ -297,6 +303,15 @@ def train(  # noqa: PLR0914, PLR0915 - linear on purpose
             max_epochs=cfg.max_epochs,
             augment=augment,
             spectral_weight=cfg.spectral_weight,
+            spectral_freq_weights=(
+                decaying_freq_weights(
+                    cfg.output_window,
+                    cfg.spectral_cutoff_period,
+                    cfg.spectral_decay,
+                )
+                if cfg.spectral_cutoff_period
+                else None
+            ),
             message_l1_weight=cfg.message_l1_weight,
             backcast_weight=cfg.backcast_weight,
             teacher_forcing_ratio=cfg.teacher_forcing_ratio,

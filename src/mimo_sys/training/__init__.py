@@ -7,6 +7,11 @@ callbacks, contrastive pretraining) and the `train` entry point.
 Methodology: `docs/6_tecnicas-de-treino.md`.
 """
 
+from mimo_sys.training.explainability import (
+    attention_by_lag,
+    gradient_saliency,
+    top_lags,
+)
 from mimo_sys.training.train import (
     ARCHITECTURES,
     BASELINE_PREPROCESSOR,
@@ -21,6 +26,9 @@ __all__ = [
     "BASELINE_PREPROCESSOR",
     "TrainConfig",
     "TrainResult",
+    "attention_by_lag",
     "build_model",
+    "gradient_saliency",
+    "top_lags",
     "train",
 ]

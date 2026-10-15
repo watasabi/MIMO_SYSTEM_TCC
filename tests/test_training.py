@@ -1,6 +1,7 @@
 """Contract tests for `mimo_sys.training` (no forecast quality)."""
 
 import lightning as L
+import numpy as np
 import pytest
 import torch
 from torch.utils.data import DataLoader, TensorDataset
@@ -408,3 +409,90 @@ def test_tune_dois_trials(mlflow_tmp: None) -> None:
         optuna.trial.FixedTrial(study.best_params), "mpnn", base
     )
     assert best.model_kwargs["hidden_size"] in {32, 64, 128}
+
+
+# ------------------------------------------------------- explainability
+
+
+def test_gradient_saliency_shape_e_nao_negativo() -> None:
+    from mimo_sys.training.explainability import (  # noqa: PLC0415
+        gradient_saliency,
+    )
+
+    model = build("seq2seq", hidden_size=8)
+    windows = torch.randn(10, INPUT_WINDOW, N_NODES)
+    sal = gradient_saliency(model, windows)
+    assert sal.shape == (INPUT_WINDOW, N_NODES)
+    assert (sal >= 0).all()
+
+
+def test_gradient_saliency_lag_recente_pesa_mais_num_caso_trivial() -> None:
+    """Num modelo que só usa o último passo, a saliência concentra lá."""
+    from mimo_sys.training.explainability import (  # noqa: PLC0415
+        gradient_saliency,
+    )
+
+    class LastStepOnly(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.head = torch.nn.Linear(N_NODES, len(TARGET_IDX))
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return self.head(x[:, -1:, :]).expand(-1, OUTPUT_WINDOW, -1)
+
+    model = LastStepOnly()
+    windows = torch.randn(16, INPUT_WINDOW, N_NODES)
+    sal = gradient_saliency(model, windows, target_idx=list(range(2)))
+    per_lag = sal.sum(axis=1)
+    assert per_lag[-1] == per_lag.max()
+    assert per_lag[:-1].max() == 0
+
+
+def test_attention_by_lag_soma_um_e_tem_input_window() -> None:
+    from mimo_sys.training.explainability import (  # noqa: PLC0415
+        attention_by_lag,
+    )
+
+    model = build("seq2seq", hidden_size=8)
+    windows = torch.randn(6, INPUT_WINDOW, N_NODES)
+    attn = attention_by_lag(model, windows)
+    assert attn.shape == (INPUT_WINDOW,)
+    assert attn.sum() == pytest.approx(1.0, abs=1e-4)
+
+
+def test_top_lags_recupera_lags_dominantes() -> None:
+    from mimo_sys.training.explainability import top_lags  # noqa: PLC0415
+
+    importance = np.zeros(10)
+    importance[[2, 7, 9]] = [5.0, 3.0, 1.0]
+    chosen = top_lags(importance, k=3, input_window=10)
+    # lag-before-last-step: índice 9 -> 0, 7 -> 2, 2 -> 7
+    assert set(chosen.tolist()) == {0, 2, 7}
+
+
+# ------------------------------------------------------- spectral loss
+
+
+def test_decaying_freq_weights_decresce_e_fica_positivo() -> None:
+    from mimo_sys.training.losses import decaying_freq_weights  # noqa: PLC0415
+
+    w = decaying_freq_weights(24, cutoff_period=12.0, decay=2.0)
+    tolerance = 1e-6
+    assert w[0] == pytest.approx(1.0)
+    assert (w > 0).all()
+    assert (np.diff(w.numpy()) <= tolerance).all()
+
+
+def test_spectral_loss_com_pesos_zero_em_igual(
+    batch: tuple[torch.Tensor, torch.Tensor],
+) -> None:
+    from mimo_sys.training.losses import (  # noqa: PLC0415
+        SpectralLoss,
+        decaying_freq_weights,
+    )
+
+    _, y = batch
+    weights = decaying_freq_weights(y.shape[1], cutoff_period=6.0)
+    loss = SpectralLoss(freq_weights=weights)
+    assert loss(y, y).item() == pytest.approx(0.0)
+    assert loss(y + 1.0, y).item() > 0
