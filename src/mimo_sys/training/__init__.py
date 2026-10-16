@@ -19,6 +19,10 @@ from mimo_sys.training.explainability import (
     gradient_saliency,
     top_lags,
 )
+from mimo_sys.training.mass_balance_cascade import (
+    fit_mass_balance,
+    mass_balance_cascade_forecast,
+)
 from mimo_sys.training.train import (
     ARCHITECTURES,
     BASELINE_PREPROCESSOR,
@@ -39,8 +43,10 @@ __all__ = [
     "average_predictions",
     "build_model",
     "fit_ensemble_weights",
+    "fit_mass_balance",
     "gradient_saliency",
     "greedy_forward_selection",
+    "mass_balance_cascade_forecast",
     "select_ensemble_subset",
     "top_lags",
     "train",

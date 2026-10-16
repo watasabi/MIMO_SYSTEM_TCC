@@ -733,3 +733,70 @@ def test_greedy_forward_selection_descarta_membro_ruim() -> None:
     subset = greedy_forward_selection(preds, y_val)
     assert "bad" not in subset
     assert "good_a" in subset
+
+
+# ---------------------------------------------- mass balance cascade
+
+
+def test_fit_mass_balance_recupera_coeficientes_exatos() -> None:
+    from mimo_sys.training.mass_balance_cascade import (  # noqa: PLC0415
+        fit_mass_balance,
+    )
+
+    rng = np.random.default_rng(0)
+    n = 200
+    inflow = rng.normal(loc=10, scale=2, size=n)
+    outflow = rng.normal(loc=9, scale=2, size=n)
+    a_true, b_true = 0.003, 0.01
+    q = inflow - outflow
+    dq = (q[1:] + q[:-1]) / 2.0
+    level = np.empty(n)
+    level[0] = 50.0
+    for k in range(1, n):
+        level[k] = level[k - 1] + a_true * dq[k - 1] + b_true
+
+    a, b = fit_mass_balance(level, inflow, outflow)
+    assert a == pytest.approx(a_true, abs=1e-9)
+    assert b == pytest.approx(b_true, abs=1e-9)
+
+
+def test_mass_balance_cascade_forecast_reproduz_a_simulacao() -> None:  # noqa: PLR0914
+    """Com outflow previsto == outflow real, a cascata reproduz o nível."""
+    from mimo_sys.training.mass_balance_cascade import (  # noqa: PLC0415
+        fit_mass_balance,
+        mass_balance_cascade_forecast,
+    )
+
+    rng = np.random.default_rng(1)
+    n = 300
+    inflow = rng.normal(loc=10, scale=2, size=n)
+    outflow = rng.normal(loc=9, scale=2, size=n)
+    a_true, b_true = 0.004, -0.02
+    q = inflow - outflow
+    dq = (q[1:] + q[:-1]) / 2.0
+    level = np.empty(n)
+    level[0] = 20.0
+    for k in range(1, n):
+        level[k] = level[k - 1] + a_true * dq[k - 1] + b_true
+
+    a, b = fit_mass_balance(level, inflow, outflow)
+    horizon = 12
+    anchors = np.arange(1, n - horizon, horizon)
+    level_anchor = level[anchors]
+    inflow_windows = np.stack(
+        [inflow[t + 1 : t + 1 + horizon] for t in anchors]
+    )
+    outflow_windows = np.stack(
+        [outflow[t + 1 : t + 1 + horizon] for t in anchors]
+    )
+    last_imbalance = (inflow - outflow)[anchors]
+    forecast = mass_balance_cascade_forecast(
+        level_anchor,
+        inflow_windows,
+        outflow_windows,
+        a,
+        b,
+        last_imbalance=last_imbalance,
+    )
+    true_windows = np.stack([level[t + 1 : t + 1 + horizon] for t in anchors])
+    np.testing.assert_allclose(forecast, true_windows, atol=1e-6)
