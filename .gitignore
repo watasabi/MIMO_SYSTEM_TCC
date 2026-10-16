@@ -21,6 +21,9 @@ mlruns/
 mlflow.db
 notebooks/**/checkpoints/
 
+# PySR search logs (symbolic regression scratch dir)
+outputs/
+
 # IDE
 .vscode/
 .idea/
