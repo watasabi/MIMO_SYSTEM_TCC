@@ -99,6 +99,55 @@ probabilidade `p` (`Compose`).
   `val_mse` no espaço do preprocessor, não `val_loss`, para que runs
   com losses diferentes sejam comparáveis.
 
+### Técnicas por saída (`training/output_heads.py`, `training/losses.py`)
+
+Surgiram da busca por R² mais alto em `nivel_res`, a saída
+estruturalmente mais difícil (ver `docs/7_tecnica-cascata-fisica.md`
+para o contexto físico completo):
+
+- **`PerOutputHeadWrapper`**: MLP de correção residual, independente
+  por saída, sobre a previsão bruta do modelo. Inicializada em zero
+  (no começo do treino, a previsão é idêntica à do modelo base).
+  Destrava técnicas mais agressivas numa saída sem arriscar as
+  outras, já que MPNN/SGN compartilham `update_fn` e
+  StemGNN/Seq2SeqLatentGNN/FourierGNN compartilham a projeção final
+  entre as 3 saídas.
+- **`UncertaintyWeightedLoss`** (`losses.py`): peso de loss aprendido
+  por saída (incerteza homocedástica, Kendall/Gal/Cipolla 2018) em
+  vez de pesos fixos — evita que o treino "desista" da saída difícil
+  só porque as outras duas já têm loss baixa.
+- **`output_weights`** (`Forecaster`): alternativa com peso manual
+  fixo por saída, para quando o aprendido não for suficiente; testado
+  e descartado como pior que o peso aprendido (ver nota de mudança).
+
+### Ensemble (`training/ensemble.py`)
+
+Combina previsões já feitas (sem retreinar nada):
+
+- `average_predictions`: média simples.
+- `fit_ensemble_weights`: peso por mínimos quadrados não-negativos
+  (NNLS), por saída — ajustar e avaliar no mesmo split superestima o
+  resultado; ajuste sempre em validação, avalie em teste.
+- `select_ensemble_subset` / `greedy_forward_selection`: escolhem,
+  por R² médio em validação, qual subconjunto de modelos já
+  treinados combinar. A busca exaustiva (`select_ensemble_subset`) só
+  é viável até uns 8-10 candidatos; `greedy_forward_selection` escala
+  para pools maiores.
+
+Combinar arquiteturas diferentes (MPNN, StemGNN, Seq2SeqLatentGNN,
+cada uma com a mesma receita de técnicas) reduz a variância do erro
+em `nivel_res` sem precisar de informação nova — elas erram em
+padrões diferentes.
+
+### Cascata física entre saídas (`training/mass_balance_cascade.py`)
+
+A técnica que mais aproximou da meta de R² — ver
+`docs/7_tecnica-cascata-fisica.md` para a explicação completa. Resumo:
+em vez de pedir para o modelo extrapolar `nivel_res` sozinho, um
+gray-box de 2 parâmetros (ajustado no treino) recalcula `nivel_res` a
+partir da própria previsão de `vazao_distribuicao` que o ensemble já
+faz bem.
+
 ### Pré-treino contrastivo (`training/contrastive.py`)
 
 O pré-treino segue o SimCLR:
@@ -155,3 +204,18 @@ result.bands         # energia por banda
   `models/<run_name>_preprocessor.joblib`, este último necessário para
   reconstruir. Use `save=False` em experimentos.
 - Treine **um modelo por processo**, como faz o notebook 06.
+
+## Resultados até agora (teste, forecast encadeado, escala original)
+
+| Config | `vazao_distribuicao` | `nivel_res` | `pressao` | R² médio |
+|---|---|---|---|---|
+| Baseline (notebook 04, antes deste toolkit) | 0,909 | 0,273 | 0,654 | 0,618 |
+| Melhor modelo individual + técnicas (§ por saída) | 0,920 | 0,462 | 0,739 | 0,707 |
+| + ensemble de 5 modelos | 0,929 | 0,508 | 0,740 | 0,726 |
+| + cascata física (`nivel_res`) | 0,929 | **0,758** | 0,740 | **0,809** |
+
+Meta do orientador (R² médio ≥0,85, cada saída ≥0,8) ainda não
+atingida — ver `docs/changes/2026-10-16-r2-push-experiment.md` para a
+lista completa do que foi tentado, o que funcionou e o que não
+funcionou, e `docs/7_tecnica-cascata-fisica.md` para o detalhe da
+última linha da tabela.

@@ -46,6 +46,9 @@ Os dados brutos (`data/raw/`) trazem dois sistemas reais de reservatório:
 |---------|------|
 | Artigo de referência | [docs/pappers/Multi-objective metaheuristics applied for the multivariable system identification.pdf](docs/pappers/Multi-objective%20metaheuristics%20applied%20for%20the%20multivariable%20system%20identification.pdf) |
 | Notebook de exploração | [notebooks/eda/01_exploracao_reservatorio_mimo.ipynb](notebooks/eda/01_exploracao_reservatorio_mimo.ipynb) |
+| Toolkit de treino (`src/mimo_sys/training`) | [docs/6_tecnicas-de-treino.md](docs/6_tecnicas-de-treino.md) |
+| Cascata física (R² ≥0,85, meta em andamento) | [docs/7_tecnica-cascata-fisica.md](docs/7_tecnica-cascata-fisica.md) |
+| Histórico de mudanças | [docs/changes/](docs/changes/) |
 | GitHub Repo | https://github.com/watasabi/mimo_sys |
 
 ### Principais Stakeholders
