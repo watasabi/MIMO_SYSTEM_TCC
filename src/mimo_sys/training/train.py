@@ -164,6 +164,7 @@ class TrainConfig:
     per_output_heads: bool = False
     per_output_heads_hidden: int = 16
     uncertainty_weighted: bool = False
+    output_weights: tuple[float, ...] | None = None
     loss: str = "mse"
     loss_kwargs: dict[str, Any] = field(default_factory=dict)
     lr: float = 1e-3
@@ -395,6 +396,7 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
             teacher_forcing_ratio=cfg.teacher_forcing_ratio,
             uncertainty_weighted=cfg.uncertainty_weighted,
             n_targets=len(TARGET_IDX) if cfg.uncertainty_weighted else None,
+            output_weights=cfg.output_weights,
         )
         checkpoint = MLflowModelCheckpoint(
             dirpath=ckpt_dir, monitor="val_mse", mode="min", save_top_k=1

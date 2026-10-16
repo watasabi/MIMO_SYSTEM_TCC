@@ -80,6 +80,12 @@ class Forecaster(L.LightningModule):
             `n_targets` must be passed when this is on.
         n_targets: Number of outputs; required with
             `uncertainty_weighted=True`.
+        output_weights: Fixed per-output loss multiplier, `(n_targets,)`
+            — a manual alternative to `uncertainty_weighted` (ignored
+            when that is on). Unlike the learned weighting, this lets
+            you force the optimiser to trade the easy outputs' error
+            for the hard one's, instead of letting it find its own
+            balance.
     """
 
     def __init__(  # noqa: PLR0913, PLR0917 - every knob is a config field
@@ -99,10 +105,17 @@ class Forecaster(L.LightningModule):
         teacher_forcing_ratio: float = 0.0,
         uncertainty_weighted: bool = False,
         n_targets: int | None = None,
+        output_weights: torch.Tensor | None = None,
     ) -> None:
         super().__init__()
         self.save_hyperparameters(
-            ignore=["model", "loss", "augment", "spectral_freq_weights"]
+            ignore=[
+                "model",
+                "loss",
+                "augment",
+                "spectral_freq_weights",
+                "output_weights",
+            ]
         )
         self.model = model
         self.loss_fn = loss if loss is not None else nn.MSELoss()
@@ -117,6 +130,12 @@ class Forecaster(L.LightningModule):
             if uncertainty_weighted
             else None
         )
+        if output_weights is not None:
+            self.register_buffer(
+                "output_weights", torch.as_tensor(output_weights).float()
+            )
+        else:
+            self.output_weights = None
         # One collection per stage: sharing state across stages mixes
         # their epoch aggregates.
         self.train_metrics = _stage_metrics()
@@ -184,6 +203,14 @@ class Forecaster(L.LightningModule):
                 },
                 on_epoch=True,
             )
+        elif self.output_weights is not None:
+            per_output = torch.stack(
+                [
+                    self.loss_fn(pred[..., i], y[..., i])
+                    for i in range(pred.shape[-1])
+                ]
+            )
+            loss = (per_output * self.output_weights).sum()
         else:
             loss = self.loss_fn(pred, y)
         if self.spectral is not None:
