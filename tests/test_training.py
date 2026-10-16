@@ -652,3 +652,67 @@ def test_uncertainty_weighted_loss_nao_zera_peso_do_termo_dificil() -> None:
     # to (near) zero relative to the easy one's.
     assert weights[1] < weights[0]
     assert weights[1] > floor
+
+
+# -------------------------------------------------------- ensemble
+
+
+def test_average_predictions() -> None:
+    from mimo_sys.training.ensemble import average_predictions  # noqa: PLC0415
+
+    a = np.ones((5, 3))
+    b = np.zeros((5, 3))
+    np.testing.assert_allclose(average_predictions([a, b]), 0.5)
+
+
+def test_fit_ensemble_weights_recupera_membro_perfeito() -> None:
+    """Se um membro acerta exatamente, o nnls deve pesar só nele."""
+    from mimo_sys.training.ensemble import (  # noqa: PLC0415
+        fit_ensemble_weights,
+        weighted_predictions,
+    )
+
+    rng = np.random.default_rng(0)
+    y_true = rng.normal(size=(50, 2))
+    perfect = y_true.copy()
+    noisy = y_true + rng.normal(scale=5.0, size=y_true.shape)
+    weights = fit_ensemble_weights([perfect, noisy], y_true)
+    assert weights.shape == (2, 2)
+    np.testing.assert_allclose(weights.sum(axis=0), 1.0, atol=1e-6)
+    combined = weighted_predictions([perfect, noisy], weights)
+    np.testing.assert_allclose(combined, y_true, atol=1e-6)
+
+
+def test_select_ensemble_subset_descarta_membro_ruim() -> None:
+    from mimo_sys.training.ensemble import (  # noqa: PLC0415
+        select_ensemble_subset,
+    )
+
+    rng = np.random.default_rng(0)
+    y_val = rng.normal(size=(50, 2))
+    preds = {
+        "good_a": y_val + rng.normal(scale=0.05, size=y_val.shape),
+        "good_b": y_val + rng.normal(scale=0.05, size=y_val.shape),
+        "bad": rng.normal(scale=10.0, size=y_val.shape),
+    }
+    subset = select_ensemble_subset(preds, y_val)
+    assert "bad" not in subset
+    assert "good_a" in subset
+    assert "good_b" in subset
+
+
+# -------------------------------------------------------- features
+
+
+def test_add_ewma_feature_e_causal_e_suave() -> None:
+    from mimo_sys.training.features import add_ewma_feature  # noqa: PLC0415
+
+    rng = np.random.default_rng(0)
+    raw = rng.normal(size=(40, 3))
+    out = add_ewma_feature(raw, col_idx=1, span=5)
+    assert out.shape == (40, 4)
+    np.testing.assert_allclose(out[:, :3], raw)
+    out_prefix = add_ewma_feature(raw[:20], col_idx=1, span=5)
+    np.testing.assert_allclose(out[:20, 3], out_prefix[:, 3])
+    # smoother than the raw column: lower variance of first differences
+    assert np.diff(out[:, 3]).std() < np.diff(raw[:, 1]).std()

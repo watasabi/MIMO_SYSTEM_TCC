@@ -83,7 +83,10 @@ from mimo_sys.training.evaluation import (
     plot_series,
     plot_spectrum,
 )
-from mimo_sys.training.features import add_mass_balance_feature
+from mimo_sys.training.features import (
+    add_ewma_feature,
+    add_mass_balance_feature,
+)
 from mimo_sys.training.forecaster import Forecaster, Scheduler
 from mimo_sys.training.integrator import LeakyIntegratorWrapper
 from mimo_sys.training.losses import (
@@ -153,6 +156,8 @@ class TrainConfig:
         default_factory=lambda: dict(BASELINE_PREPROCESSOR)
     )
     mass_balance_feature: bool = False
+    mass_balance_window: int | None = None
+    mass_balance_ewma_span: float | None = None
     revin: RevINMode | None = None
     leaky_integrator_idx: list[int] | None = None
     leaky_integrator_init: float = 0.98
@@ -232,6 +237,39 @@ def _augmentations(cfg: TrainConfig) -> Compose | None:
     return Compose(augs, p=cfg.augment_p) if augs else None
 
 
+def add_derived_features(
+    cfg: TrainConfig, splits: dict[str, npt.NDArray]
+) -> dict[str, npt.NDArray]:
+    """Re-split after appending `cfg`'s configured extra feature columns.
+
+    Features are computed on the full, chronologically concatenated
+    series (so running sums/averages don't reset at a split boundary)
+    then sliced back — exposed separately from `_windows` so callers
+    evaluating a trained model (e.g. `chained_forecast` on a raw
+    segment) can reproduce the exact same columns.
+    """
+    if not cfg.mass_balance_feature:
+        return splits
+    full = np.concatenate([splits["train"], splits["val"], splits["test"]])
+    full = add_mass_balance_feature(
+        full,
+        INPUT_COLS.index("vazao_entrada"),
+        TARGET_IDX[0],
+        window=cfg.mass_balance_window,
+    )
+    if cfg.mass_balance_ewma_span:
+        full = add_ewma_feature(
+            full, full.shape[1] - 1, span=cfg.mass_balance_ewma_span
+        )
+    train_end = len(splits["train"])
+    val_end = train_end + len(splits["val"])
+    return {
+        "train": full[:train_end],
+        "val": full[train_end:val_end],
+        "test": full[val_end:],
+    }
+
+
 def _windows(
     cfg: TrainConfig, splits: dict[str, npt.NDArray]
 ) -> tuple[TimeSeriesPreprocessor, dict, npt.NDArray, npt.NDArray]:
@@ -240,18 +278,7 @@ def _windows(
     Val/test segments start `cfg.input_window` rows early so their
     first target is the first row of the split.
     """
-    if cfg.mass_balance_feature:
-        full = np.concatenate([splits["train"], splits["val"], splits["test"]])
-        full = add_mass_balance_feature(
-            full, INPUT_COLS.index("vazao_entrada"), TARGET_IDX[0]
-        )
-        train_end = len(splits["train"])
-        val_end = train_end + len(splits["val"])
-        splits = {
-            "train": full[:train_end],
-            "val": full[train_end:val_end],
-            "test": full[val_end:],
-        }
+    splits = add_derived_features(cfg, splits)
 
     pp = TimeSeriesPreprocessor(
         window_size=cfg.input_window,
@@ -282,7 +309,9 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
     pp, windows, test_seg, train_targets = _windows(cfg, splits)
     loaders = make_loaders(windows, cfg.batch_size)
 
-    n_nodes = N_NODES + 1 if cfg.mass_balance_feature else N_NODES
+    n_nodes = N_NODES
+    if cfg.mass_balance_feature:
+        n_nodes += 1 + bool(cfg.mass_balance_ewma_span)
     model = build_model(
         cfg.model,
         cfg.input_window,
