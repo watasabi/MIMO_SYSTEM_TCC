@@ -9,6 +9,44 @@ import torch
 from torch import nn
 
 
+class UncertaintyWeightedLoss(nn.Module):
+    """Learned per-output loss weights (Kendall, Gal & Cipolla, 2018).
+
+    One of the 3 outputs (`nivel_res`) is structurally harder — it
+    integrates the inflow/outflow imbalance over time instead of being
+    near-algebraic in the current inputs, see
+    `docs/1_analise-dados-reservatorio.md` §4-5. A fixed-weight sum of
+    per-output losses lets training settle for the easy outputs and
+    plateau on the hard one; this instead gives each output `i` a
+    learned log-variance `s_i = log(w_i^2)`, and combines losses as
+
+        total = sum_i [ L_i * exp(-s_i) + s_i ]
+
+    which is `L_i / (2 w_i^2) + ln(1 + w_i^2)` up to a constant (the
+    paper's homoscedastic-uncertainty derivation): a large `L_i` pushes
+    `s_i` up, which both shrinks that output's effective weight *and*
+    is penalised by the `+ s_i` term, so the optimiser cannot drive a
+    hard output's weight to zero to ignore it — it has to actually
+    reduce `L_i` to reduce `total` further.
+
+    Args:
+        n_outputs: Number of outputs, each getting its own `s_i`.
+    """
+
+    def __init__(self, n_outputs: int) -> None:
+        super().__init__()
+        self.log_vars = nn.Parameter(torch.zeros(n_outputs))
+
+    def forward(self, per_output_loss: torch.Tensor) -> torch.Tensor:
+        """Combine `(n_outputs,)` per-output scalar losses into one."""
+        precision = torch.exp(-self.log_vars)
+        return (precision * per_output_loss + self.log_vars).sum()
+
+    def weights(self) -> torch.Tensor:
+        """Current effective weight `exp(-s_i)` per output, for logging."""
+        return torch.exp(-self.log_vars).detach()
+
+
 class SMAPELoss(nn.Module):
     """Symmetric MAPE (fraction, not %)."""
 
