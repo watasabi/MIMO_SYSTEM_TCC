@@ -17,8 +17,20 @@ from mimo_sys.architectures import (
     SymbolicGraphNetwork,
 )
 from mimo_sys.training.augmentations import Batch
-from mimo_sys.training.losses import SpectralLoss
+from mimo_sys.training.integrator import LeakyIntegratorWrapper
+from mimo_sys.training.losses import SpectralLoss, UncertaintyWeightedLoss
+from mimo_sys.training.output_heads import PerOutputHeadWrapper
 from mimo_sys.training.scalers import RevINWrapper
+
+_WRAPPERS = (RevINWrapper, LeakyIntegratorWrapper, PerOutputHeadWrapper)
+
+
+def _unwrap(model: nn.Module) -> nn.Module:
+    """Peel RevIN/leaky-integrator/per-output-head wrappers to the core."""
+    while isinstance(model, _WRAPPERS):
+        model = model.model
+    return model
+
 
 Scheduler = Literal["plateau", "cosine_warmup", "onecycle", "none"]
 
@@ -59,6 +71,21 @@ class Forecaster(L.LightningModule):
             backcast head gets no gradient without it.
         teacher_forcing_ratio: Seq2SeqLatentGNN teacher forcing in
             training.
+        uncertainty_weighted: Combine per-output losses with
+            `losses.UncertaintyWeightedLoss` instead of averaging them
+            — lets a structurally harder output (e.g. `nivel_res`,
+            which integrates the inflow/outflow imbalance instead of
+            being near-algebraic in the inputs) keep pulling the
+            optimiser instead of being drowned out by easier outputs.
+            `n_targets` must be passed when this is on.
+        n_targets: Number of outputs; required with
+            `uncertainty_weighted=True`.
+        output_weights: Fixed per-output loss multiplier, `(n_targets,)`
+            — a manual alternative to `uncertainty_weighted` (ignored
+            when that is on). Unlike the learned weighting, this lets
+            you force the optimiser to trade the easy outputs' error
+            for the hard one's, instead of letting it find its own
+            balance.
     """
 
     def __init__(  # noqa: PLR0913, PLR0917 - every knob is a config field
@@ -76,10 +103,19 @@ class Forecaster(L.LightningModule):
         message_l1_weight: float = 0.0,
         backcast_weight: float = 1.0,
         teacher_forcing_ratio: float = 0.0,
+        uncertainty_weighted: bool = False,
+        n_targets: int | None = None,
+        output_weights: torch.Tensor | None = None,
     ) -> None:
         super().__init__()
         self.save_hyperparameters(
-            ignore=["model", "loss", "augment", "spectral_freq_weights"]
+            ignore=[
+                "model",
+                "loss",
+                "augment",
+                "spectral_freq_weights",
+                "output_weights",
+            ]
         )
         self.model = model
         self.loss_fn = loss if loss is not None else nn.MSELoss()
@@ -89,6 +125,17 @@ class Forecaster(L.LightningModule):
             if spectral_weight > 0
             else None
         )
+        self.uncertainty = (
+            UncertaintyWeightedLoss(n_targets)
+            if uncertainty_weighted
+            else None
+        )
+        if output_weights is not None:
+            self.register_buffer(
+                "output_weights", torch.as_tensor(output_weights).float()
+            )
+        else:
+            self.output_weights = None
         # One collection per stage: sharing state across stages mixes
         # their epoch aggregates.
         self.train_metrics = _stage_metrics()
@@ -97,10 +144,8 @@ class Forecaster(L.LightningModule):
 
     @property
     def core(self) -> nn.Module:
-        """The architecture itself, without the RevIN wrapper."""
-        if isinstance(self.model, RevINWrapper):
-            return self.model.model
-        return self.model
+        """The architecture itself, under any RevIN/integrator wrappers."""
+        return _unwrap(self.model)
 
     def encoder_modules(self) -> list[nn.Module]:
         """Encoder modules of the architecture (for `EncoderFreeze`)."""
@@ -112,11 +157,13 @@ class Forecaster(L.LightningModule):
 
     def _aux_loss(self, x: torch.Tensor) -> torch.Tensor:
         core = self.core
-        seen = (
-            self.model.last_normalized
-            if isinstance(self.model, RevINWrapper)
-            else x
-        )
+        seen = x
+        probe = self.model
+        while isinstance(probe, _WRAPPERS):
+            if isinstance(probe, RevINWrapper):
+                seen = probe.last_normalized
+                break
+            probe = probe.model
         aux = torch.zeros((), device=x.device)
         hp = self.hparams
         if hp.message_l1_weight > 0 and isinstance(
@@ -141,7 +188,31 @@ class Forecaster(L.LightningModule):
         else:
             pred = self.model(x)
 
-        loss = self.loss_fn(pred, y)
+        if self.uncertainty is not None:
+            per_output = torch.stack(
+                [
+                    self.loss_fn(pred[..., i], y[..., i])
+                    for i in range(pred.shape[-1])
+                ]
+            )
+            loss = self.uncertainty(per_output)
+            self.log_dict(
+                {
+                    f"{stage}_uncertainty_weight_{i}": w
+                    for i, w in enumerate(self.uncertainty.weights())
+                },
+                on_epoch=True,
+            )
+        elif self.output_weights is not None:
+            per_output = torch.stack(
+                [
+                    self.loss_fn(pred[..., i], y[..., i])
+                    for i in range(pred.shape[-1])
+                ]
+            )
+            loss = (per_output * self.output_weights).sum()
+        else:
+            loss = self.loss_fn(pred, y)
         if self.spectral is not None:
             loss += self.hparams.spectral_weight * self.spectral(pred, y)
         if training:

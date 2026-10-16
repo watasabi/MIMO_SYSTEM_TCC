@@ -63,6 +63,7 @@ from mimo_sys.training.callbacks import (
 )
 from mimo_sys.training.contrastive import ContrastivePretrainer
 from mimo_sys.training.data import (
+    INPUT_COLS,
     INPUT_IDX,
     INPUT_WINDOW,
     MODELS_DIR,
@@ -82,12 +83,18 @@ from mimo_sys.training.evaluation import (
     plot_series,
     plot_spectrum,
 )
+from mimo_sys.training.features import (
+    add_ewma_feature,
+    add_mass_balance_feature,
+)
 from mimo_sys.training.forecaster import Forecaster, Scheduler
+from mimo_sys.training.integrator import LeakyIntegratorWrapper
 from mimo_sys.training.losses import (
     build_loss,
     decaying_freq_weights,
     seasonal_naive_scale,
 )
+from mimo_sys.training.output_heads import PerOutputHeadWrapper
 from mimo_sys.training.scalers import RevINMode, RevINWrapper
 
 ARCHITECTURES: dict[str, type[nn.Module]] = {
@@ -112,6 +119,7 @@ def build_model(
     name: str,
     input_window: int = INPUT_WINDOW,
     output_window: int = OUTPUT_WINDOW,
+    n_nodes: int = N_NODES,
     **kwargs: Any,
 ) -> nn.Module:
     """Instantiate an architecture with the project geometry.
@@ -123,9 +131,12 @@ def build_model(
             `2 * input_window` scalars, and the search degrades past a
             handful — see `docs/4_rotas-de-extracao.md`.
         output_window: Forecast horizon.
+        n_nodes: Number of input series; `N_NODES + 1` when
+            `TrainConfig.mass_balance_feature` adds the integral
+            column (see `features.add_mass_balance_feature`).
     """
     geometry = {
-        "n_nodes": N_NODES,
+        "n_nodes": n_nodes,
         "input_window": input_window,
         "output_window": output_window,
         "target_idx": TARGET_IDX,
@@ -144,7 +155,16 @@ class TrainConfig:
     preprocessor: dict[str, Any] = field(
         default_factory=lambda: dict(BASELINE_PREPROCESSOR)
     )
+    mass_balance_feature: bool = False
+    mass_balance_window: int | None = None
+    mass_balance_ewma_span: float | None = None
     revin: RevINMode | None = None
+    leaky_integrator_idx: list[int] | None = None
+    leaky_integrator_init: float = 0.98
+    per_output_heads: bool = False
+    per_output_heads_hidden: int = 16
+    uncertainty_weighted: bool = False
+    output_weights: tuple[float, ...] | None = None
     loss: str = "mse"
     loss_kwargs: dict[str, Any] = field(default_factory=dict)
     lr: float = 1e-3
@@ -218,6 +238,39 @@ def _augmentations(cfg: TrainConfig) -> Compose | None:
     return Compose(augs, p=cfg.augment_p) if augs else None
 
 
+def add_derived_features(
+    cfg: TrainConfig, splits: dict[str, npt.NDArray]
+) -> dict[str, npt.NDArray]:
+    """Re-split after appending `cfg`'s configured extra feature columns.
+
+    Features are computed on the full, chronologically concatenated
+    series (so running sums/averages don't reset at a split boundary)
+    then sliced back — exposed separately from `_windows` so callers
+    evaluating a trained model (e.g. `chained_forecast` on a raw
+    segment) can reproduce the exact same columns.
+    """
+    if not cfg.mass_balance_feature:
+        return splits
+    full = np.concatenate([splits["train"], splits["val"], splits["test"]])
+    full = add_mass_balance_feature(
+        full,
+        INPUT_COLS.index("vazao_entrada"),
+        TARGET_IDX[0],
+        window=cfg.mass_balance_window,
+    )
+    if cfg.mass_balance_ewma_span:
+        full = add_ewma_feature(
+            full, full.shape[1] - 1, span=cfg.mass_balance_ewma_span
+        )
+    train_end = len(splits["train"])
+    val_end = train_end + len(splits["val"])
+    return {
+        "train": full[:train_end],
+        "val": full[train_end:val_end],
+        "test": full[val_end:],
+    }
+
+
 def _windows(
     cfg: TrainConfig, splits: dict[str, npt.NDArray]
 ) -> tuple[TimeSeriesPreprocessor, dict, npt.NDArray, npt.NDArray]:
@@ -226,6 +279,8 @@ def _windows(
     Val/test segments start `cfg.input_window` rows early so their
     first target is the first row of the split.
     """
+    splits = add_derived_features(cfg, splits)
+
     pp = TimeSeriesPreprocessor(
         window_size=cfg.input_window,
         horizon=cfg.output_window,
@@ -246,7 +301,7 @@ def _windows(
     return pp, windows, test_seg, train_targets
 
 
-def train(  # noqa: PLR0914, PLR0915 - linear on purpose
+def train(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
     cfg: TrainConfig, extra_callbacks: list[Callback] | None = None
 ) -> TrainResult:
     """Train, evaluate and log one model. See module docstring."""
@@ -255,11 +310,29 @@ def train(  # noqa: PLR0914, PLR0915 - linear on purpose
     pp, windows, test_seg, train_targets = _windows(cfg, splits)
     loaders = make_loaders(windows, cfg.batch_size)
 
+    n_nodes = N_NODES
+    if cfg.mass_balance_feature:
+        n_nodes += 1 + bool(cfg.mass_balance_ewma_span)
     model = build_model(
-        cfg.model, cfg.input_window, cfg.output_window, **cfg.model_kwargs
+        cfg.model,
+        cfg.input_window,
+        cfg.output_window,
+        n_nodes,
+        **cfg.model_kwargs,
     )
     if cfg.revin:
-        model = RevINWrapper(model, N_NODES, TARGET_IDX, mode=cfg.revin)
+        model = RevINWrapper(model, n_nodes, TARGET_IDX, mode=cfg.revin)
+    if cfg.leaky_integrator_idx:
+        model = LeakyIntegratorWrapper(
+            model,
+            TARGET_IDX,
+            cfg.leaky_integrator_idx,
+            init_leak=cfg.leaky_integrator_init,
+        )
+    if cfg.per_output_heads:
+        model = PerOutputHeadWrapper(
+            model, len(TARGET_IDX), hidden=cfg.per_output_heads_hidden
+        )
 
     loss_kwargs = dict(cfg.loss_kwargs)
     if cfg.loss == "mase":
@@ -321,6 +394,9 @@ def train(  # noqa: PLR0914, PLR0915 - linear on purpose
             message_l1_weight=cfg.message_l1_weight,
             backcast_weight=cfg.backcast_weight,
             teacher_forcing_ratio=cfg.teacher_forcing_ratio,
+            uncertainty_weighted=cfg.uncertainty_weighted,
+            n_targets=len(TARGET_IDX) if cfg.uncertainty_weighted else None,
+            output_weights=cfg.output_weights,
         )
         checkpoint = MLflowModelCheckpoint(
             dirpath=ckpt_dir, monitor="val_mse", mode="min", save_top_k=1

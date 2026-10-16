@@ -496,3 +496,240 @@ def test_spectral_loss_com_pesos_zero_em_igual(
     loss = SpectralLoss(freq_weights=weights)
     assert loss(y, y).item() == pytest.approx(0.0)
     assert loss(y + 1.0, y).item() > 0
+
+
+# -------------------------------------------------- leaky integrator
+
+
+def test_leaky_integrator_mantem_contrato(
+    batch: tuple[torch.Tensor, torch.Tensor],
+) -> None:
+    from mimo_sys.training.integrator import (  # noqa: PLC0415
+        LeakyIntegratorWrapper,
+    )
+
+    x, _ = batch
+    model = LeakyIntegratorWrapper(
+        build("mpnn"), target_idx=TARGET_IDX, state_idx=[5]
+    )
+    out = model(x)
+    assert out.shape == (BATCH, OUTPUT_WINDOW, len(TARGET_IDX))
+
+
+def test_leaky_integrator_nao_afeta_sa_das_nao_integradas(
+    batch: tuple[torch.Tensor, torch.Tensor],
+) -> None:
+    from mimo_sys.training.integrator import (  # noqa: PLC0415
+        LeakyIntegratorWrapper,
+    )
+
+    x, _ = batch
+    torch.manual_seed(SEED)
+    raw_model = build("mpnn")
+    torch.manual_seed(SEED)
+    wrapped = LeakyIntegratorWrapper(
+        build("mpnn"), target_idx=TARGET_IDX, state_idx=[5]
+    )
+    wrapped.model.load_state_dict(raw_model.state_dict())
+    out_raw = raw_model.eval()(x)
+    out_wrapped = wrapped.eval()(x)
+    torch.testing.assert_close(out_wrapped[..., 0], out_raw[..., 0])
+    torch.testing.assert_close(out_wrapped[..., 2], out_raw[..., 2])
+    assert not torch.allclose(out_wrapped[..., 1], out_raw[..., 1])
+
+
+def test_leaky_integrator_leak_proximo_de_um_e_soma_cumulativa() -> None:
+    from mimo_sys.training.integrator import (  # noqa: PLC0415
+        LeakyIntegratorWrapper,
+    )
+
+    class ConstantDelta(torch.nn.Module):
+        def forward(self, x: torch.Tensor, **kw: object) -> torch.Tensor:  # noqa: PLR6301
+            return torch.ones(x.shape[0], OUTPUT_WINDOW, len(TARGET_IDX))
+
+    model = LeakyIntegratorWrapper(
+        ConstantDelta(),
+        target_idx=TARGET_IDX,
+        state_idx=[5],
+        init_leak=1.0 - 1e-7,
+    )
+    x = torch.zeros(1, INPUT_WINDOW, N_NODES)
+    x[0, -1, 5] = 10.0
+    out = model(x)
+    expected = 10.0 + torch.arange(1, OUTPUT_WINDOW + 1, dtype=torch.float32)
+    torch.testing.assert_close(out[0, :, 1], expected, atol=1e-3, rtol=0)
+
+
+# -------------------------------------------------- per-output heads
+
+
+def test_per_output_head_identidade_na_inicializacao(
+    batch: tuple[torch.Tensor, torch.Tensor],
+) -> None:
+    """Correction heads start at zero: output == backbone's own forecast."""
+    from mimo_sys.training.output_heads import (  # noqa: PLC0415
+        PerOutputHeadWrapper,
+    )
+
+    x, _ = batch
+    torch.manual_seed(SEED)
+    raw_model = build("mpnn").eval()
+    wrapped = PerOutputHeadWrapper(raw_model, n_targets=len(TARGET_IDX)).eval()
+    torch.testing.assert_close(wrapped(x), raw_model(x))
+
+
+def test_per_output_head_mantem_contrato(
+    batch: tuple[torch.Tensor, torch.Tensor],
+) -> None:
+    from mimo_sys.training.output_heads import (  # noqa: PLC0415
+        PerOutputHeadWrapper,
+    )
+
+    x, _ = batch
+    model = PerOutputHeadWrapper(build("mpnn"), n_targets=len(TARGET_IDX))
+    out = model(x)
+    assert out.shape == (BATCH, OUTPUT_WINDOW, len(TARGET_IDX))
+    out.sum().backward()
+    missing = [n for n, p in model.named_parameters() if p.grad is None]
+    assert not missing
+
+
+# -------------------------------------------------- mass balance feature
+
+
+def test_mass_balance_feature_e_cumsum_causal() -> None:
+    from mimo_sys.training.features import (  # noqa: PLC0415
+        add_mass_balance_feature,
+    )
+
+    rng = np.random.default_rng(0)
+    raw = rng.normal(size=(50, N_NODES))
+    inflow_idx, outflow_idx = 3, 4
+    out = add_mass_balance_feature(raw, inflow_idx, outflow_idx)
+    assert out.shape == (50, N_NODES + 1)
+    np.testing.assert_allclose(out[:, :N_NODES], raw)
+    expected = np.cumsum(raw[:, inflow_idx] - raw[:, outflow_idx])
+    np.testing.assert_allclose(out[:, N_NODES], expected)
+    # causal: value at row i only depends on rows <= i
+    out_prefix = add_mass_balance_feature(raw[:30], inflow_idx, outflow_idx)
+    np.testing.assert_allclose(out[:30, N_NODES], out_prefix[:, N_NODES])
+
+
+# -------------------------------------------------- uncertainty weighting
+
+
+def test_uncertainty_weighted_loss_pondera_e_tem_gradiente() -> None:
+    from mimo_sys.training.losses import (  # noqa: PLC0415
+        UncertaintyWeightedLoss,
+    )
+
+    loss_fn = UncertaintyWeightedLoss(n_outputs=3)
+    per_output = torch.tensor([1.0, 1.0, 1.0], requires_grad=True)
+    total = loss_fn(per_output)
+    assert total.item() > 0
+    total.backward()
+    assert per_output.grad is not None
+    assert loss_fn.log_vars.grad is not None
+    assert loss_fn.weights().shape == (3,)
+
+
+def test_uncertainty_weighted_loss_nao_zera_peso_do_termo_dificil() -> None:
+    """The `+ s_i` term stops the optimiser from ignoring a hard term."""
+    from mimo_sys.training.losses import (  # noqa: PLC0415
+        UncertaintyWeightedLoss,
+    )
+
+    loss_fn = UncertaintyWeightedLoss(n_outputs=2)
+    optimizer = torch.optim.SGD(loss_fn.parameters(), lr=0.1)
+    easy_hard = torch.tensor([0.01, 10.0])
+    for _ in range(200):
+        optimizer.zero_grad()
+        loss_fn(easy_hard).backward()
+        optimizer.step()
+    weights = loss_fn.weights()
+    floor = 1e-3
+    # the hard term's weight shrinks (down-weighted) but never collapses
+    # to (near) zero relative to the easy one's.
+    assert weights[1] < weights[0]
+    assert weights[1] > floor
+
+
+# -------------------------------------------------------- ensemble
+
+
+def test_average_predictions() -> None:
+    from mimo_sys.training.ensemble import average_predictions  # noqa: PLC0415
+
+    a = np.ones((5, 3))
+    b = np.zeros((5, 3))
+    np.testing.assert_allclose(average_predictions([a, b]), 0.5)
+
+
+def test_fit_ensemble_weights_recupera_membro_perfeito() -> None:
+    """Se um membro acerta exatamente, o nnls deve pesar só nele."""
+    from mimo_sys.training.ensemble import (  # noqa: PLC0415
+        fit_ensemble_weights,
+        weighted_predictions,
+    )
+
+    rng = np.random.default_rng(0)
+    y_true = rng.normal(size=(50, 2))
+    perfect = y_true.copy()
+    noisy = y_true + rng.normal(scale=5.0, size=y_true.shape)
+    weights = fit_ensemble_weights([perfect, noisy], y_true)
+    assert weights.shape == (2, 2)
+    np.testing.assert_allclose(weights.sum(axis=0), 1.0, atol=1e-6)
+    combined = weighted_predictions([perfect, noisy], weights)
+    np.testing.assert_allclose(combined, y_true, atol=1e-6)
+
+
+def test_select_ensemble_subset_descarta_membro_ruim() -> None:
+    from mimo_sys.training.ensemble import (  # noqa: PLC0415
+        select_ensemble_subset,
+    )
+
+    rng = np.random.default_rng(0)
+    y_val = rng.normal(size=(50, 2))
+    preds = {
+        "good_a": y_val + rng.normal(scale=0.05, size=y_val.shape),
+        "good_b": y_val + rng.normal(scale=0.05, size=y_val.shape),
+        "bad": rng.normal(scale=10.0, size=y_val.shape),
+    }
+    subset = select_ensemble_subset(preds, y_val)
+    assert "bad" not in subset
+    assert "good_a" in subset
+    assert "good_b" in subset
+
+
+# -------------------------------------------------------- features
+
+
+def test_add_ewma_feature_e_causal_e_suave() -> None:
+    from mimo_sys.training.features import add_ewma_feature  # noqa: PLC0415
+
+    rng = np.random.default_rng(0)
+    raw = rng.normal(size=(40, 3))
+    out = add_ewma_feature(raw, col_idx=1, span=5)
+    assert out.shape == (40, 4)
+    np.testing.assert_allclose(out[:, :3], raw)
+    out_prefix = add_ewma_feature(raw[:20], col_idx=1, span=5)
+    np.testing.assert_allclose(out[:20, 3], out_prefix[:, 3])
+    # smoother than the raw column: lower variance of first differences
+    assert np.diff(out[:, 3]).std() < np.diff(raw[:, 1]).std()
+
+
+def test_greedy_forward_selection_descarta_membro_ruim() -> None:
+    from mimo_sys.training.ensemble import (  # noqa: PLC0415
+        greedy_forward_selection,
+    )
+
+    rng = np.random.default_rng(0)
+    y_val = rng.normal(size=(50, 2))
+    preds = {
+        "good_a": y_val + rng.normal(scale=0.05, size=y_val.shape),
+        "good_b": y_val + rng.normal(scale=0.05, size=y_val.shape),
+        "bad": rng.normal(scale=10.0, size=y_val.shape),
+    }
+    subset = greedy_forward_selection(preds, y_val)
+    assert "bad" not in subset
+    assert "good_a" in subset
