@@ -10,6 +10,7 @@ Methodology: `docs/6_tecnicas-de-treino.md`.
 from mimo_sys.training.ensemble import (
     average_predictions,
     fit_ensemble_weights,
+    greedy_forward_selection,
     select_ensemble_subset,
     weighted_predictions,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "build_model",
     "fit_ensemble_weights",
     "gradient_saliency",
+    "greedy_forward_selection",
     "select_ensemble_subset",
     "top_lags",
     "train",

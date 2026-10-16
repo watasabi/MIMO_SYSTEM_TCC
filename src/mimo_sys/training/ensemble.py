@@ -63,6 +63,12 @@ def weighted_predictions(
     return np.einsum("stm,mt->st", stacked, weights)
 
 
+def _mean_r2(pred: npt.NDArray, y_true: npt.NDArray) -> float:
+    err = y_true - pred
+    ss_tot = ((y_true - y_true.mean(axis=0)) ** 2).sum(axis=0)
+    return float((1 - (err**2).sum(axis=0) / ss_tot).mean())
+
+
 def select_ensemble_subset(
     val_preds: dict[str, npt.NDArray],
     y_val: npt.NDArray,
@@ -71,12 +77,13 @@ def select_ensemble_subset(
 ) -> tuple[str, ...]:
     """Pick the subset of members whose mean-R² average is best on val.
 
-    Brute-force over every subset size in `[min_size, max_size]` — fine
-    for the handful of trained members this is meant for (dozens, not
-    hundreds; cost is exponential in member count). Selecting and
-    reporting on the same split overstates the ensemble (same caveat
-    as `fit_ensemble_weights`): call this on validation predictions,
-    then evaluate the chosen subset's *test* predictions separately.
+    Brute-force over every subset size in `[min_size, max_size]`. Only
+    practical for a handful of members (cost is exponential in member
+    count); use `greedy_forward_selection` for a larger pool. Selecting
+    and reporting on the same split overstates the ensemble (same
+    caveat as `fit_ensemble_weights`): call this on validation
+    predictions, then evaluate the chosen subset's *test* predictions
+    separately.
 
     Args:
         val_preds: `{member_name: (n_steps, n_targets) predictions}`
@@ -98,10 +105,55 @@ def select_ensemble_subset(
     for size in range(min_size, max_size + 1):
         for combo in itertools.combinations(names, size):
             avg = average_predictions([val_preds[n] for n in combo])
-            err = y_val - avg
-            ss_tot = ((y_val - y_val.mean(axis=0)) ** 2).sum(axis=0)
-            score = float((1 - (err**2).sum(axis=0) / ss_tot).mean())
+            score = _mean_r2(avg, y_val)
             if best is None or score > best[0]:
                 best = (score, combo)
     assert best is not None
     return best[1]
+
+
+def greedy_forward_selection(
+    val_preds: dict[str, npt.NDArray],
+    y_val: npt.NDArray,
+    min_improvement: float = 1e-4,
+) -> tuple[str, ...]:
+    """Greedily grow an ensemble by mean-R² on val, one member at a time.
+
+    Scales linearly with pool size (`O(n^2)` total evaluations against
+    `select_ensemble_subset`'s `O(2^n)`), so this is the one to use for
+    pools larger than ~8-10 candidates. Same selection-on-val caveat as
+    `select_ensemble_subset`.
+
+    Args:
+        val_preds: `{member_name: (n_steps, n_targets) predictions}`
+            on a held-out split not used to pick members.
+        y_val: `(n_steps, n_targets)` ground truth for that split.
+        min_improvement: Stop once no remaining candidate improves the
+            running average's mean R² by at least this much.
+
+    Returns:
+        The chosen member names, in the order they were added.
+    """
+    chosen: list[str] = []
+    remaining = list(val_preds)
+    best_score = -np.inf
+    while remaining:
+        scored = [
+            (
+                _mean_r2(
+                    average_predictions(
+                        [val_preds[n] for n in (*chosen, cand)]
+                    ),
+                    y_val,
+                ),
+                cand,
+            )
+            for cand in remaining
+        ]
+        top_score, top_cand = max(scored)
+        if top_score <= best_score + min_improvement:
+            break
+        best_score = top_score
+        chosen.append(top_cand)
+        remaining.remove(top_cand)
+    return tuple(chosen)

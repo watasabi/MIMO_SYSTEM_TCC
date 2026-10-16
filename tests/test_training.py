@@ -716,3 +716,20 @@ def test_add_ewma_feature_e_causal_e_suave() -> None:
     np.testing.assert_allclose(out[:20, 3], out_prefix[:, 3])
     # smoother than the raw column: lower variance of first differences
     assert np.diff(out[:, 3]).std() < np.diff(raw[:, 1]).std()
+
+
+def test_greedy_forward_selection_descarta_membro_ruim() -> None:
+    from mimo_sys.training.ensemble import (  # noqa: PLC0415
+        greedy_forward_selection,
+    )
+
+    rng = np.random.default_rng(0)
+    y_val = rng.normal(size=(50, 2))
+    preds = {
+        "good_a": y_val + rng.normal(scale=0.05, size=y_val.shape),
+        "good_b": y_val + rng.normal(scale=0.05, size=y_val.shape),
+        "bad": rng.normal(scale=10.0, size=y_val.shape),
+    }
+    subset = greedy_forward_selection(preds, y_val)
+    assert "bad" not in subset
+    assert "good_a" in subset
