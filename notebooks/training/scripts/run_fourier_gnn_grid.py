@@ -15,6 +15,8 @@ Uso:
 
 from __future__ import annotations
 
+import mlflow
+
 from mimo_sys.training import TrainConfig, train
 
 EXPERIMENT = "mimo_sys_explainability"
@@ -58,12 +60,35 @@ def jobs() -> list[TrainConfig]:
     ]
 
 
+def done_run_names() -> set[str]:
+    """Run names already logged in `EXPERIMENT` (completed or not).
+
+    Lets a rerun skip what an earlier, interrupted pass already did.
+    """
+    exp = mlflow.get_experiment_by_name(EXPERIMENT)
+    if exp is None:
+        return set()
+    df = mlflow.search_runs([exp.experiment_id], max_results=5000)
+    if "tags.mlflow.runName" not in df:
+        return set()
+    return set(df["tags.mlflow.runName"].dropna())
+
+
 def main() -> None:
-    """Run every job, printing progress."""
-    cfgs = jobs()
-    print(f"{len(cfgs)} treinos")
-    for i, cfg in enumerate(cfgs, 1):
-        print(f"[{i}/{len(cfgs)}] {cfg.run_name}", flush=True)
+    """Run pending jobs, printing progress.
+
+    Skips `run_name`s already present in `EXPERIMENT`, so re-running
+    after an interruption resumes instead of retraining everything.
+    """
+    all_jobs = jobs()
+    done = done_run_names()
+    pending = [cfg for cfg in all_jobs if cfg.run_name not in done]
+    print(
+        f"{len(all_jobs)} treinos, {len(done)} já feitos, "
+        f"{len(pending)} pendentes"
+    )
+    for i, cfg in enumerate(pending, 1):
+        print(f"[{i}/{len(pending)}] {cfg.run_name}", flush=True)
         result = train(cfg)
         print("  r2_medio:", result.metrics["r2"].mean().round(3))
 
