@@ -94,6 +94,39 @@ rodar em cascata.
 3. **O resultado**: não precisa retreinar nenhum modelo. É uma combinação
    feita depois do fato, com 2 números ajustados uma única vez.
 
+### Arquitetura
+
+![Pipeline da cascata física: janela de entrada compartilhada, ensemble de 5 modelos, e a previsão de nivel_res recalculada pelo modelo de balanço de massa a partir da própria previsão de vazao_distribuicao do ensemble](figures/mass_balance_cascade_architecture.svg)
+
+`vazao_distribuicao` e `pressao` saem direto da média do ensemble. Só
+`nivel_res` muda de fonte: a previsão bruta do ensemble para ela
+(R² 0,508) é descartada e substituída pela saída da cascata física
+(R² 0,758), que usa a previsão de `vazao_distribuicao` do próprio
+ensemble como entrada. Nada é retreinado — a cascata é uma combinação
+pós-hoc, com `a`/`b` ajustados uma única vez no split de treino.
+
+### Protocolo de janelamento
+
+Os 5 modelos do ensemble (e a cascata, que herda a mesma estrutura de
+janelas) seguem o protocolo padrão de `mimo_sys.training.evaluation.
+chained_forecast`, igual ao dos outros experimentos do projeto:
+
+- **`input_window = 24`** passos horários, **`output_window = 12`**
+  passos de horizonte — nenhum dos 5 membros usa a janela pequena da
+  rota de destilação simbólica (`input_window = 3`, ver
+  `docs/4_rotas-de-extracao.md`); esta é a rota de acurácia (rota B),
+  com `input_window` igual ao notebook 04.
+- A janela de entrada em `t` cobre `dado[t-24 : t]`; o alvo é
+  `dado[t : t+12]`. A próxima janela começa exatamente em `t+12` — sem
+  sobreposição, cada instante do teste aparece no alvo de exatamente
+  uma janela.
+- A âncora (`nivel_res[t-1]`, o último valor observado antes da
+  janela) nunca é o próprio instante sendo previsto — ver a prova de
+  ausência de vazamento em `tests/test_preprocessors.py::
+  test_janela_de_entrada_nunca_inclui_o_alvo`.
+
+![Protocolo de janelamento: janela de entrada de 24 passos, alvo de 12 passos, próxima janela começando exatamente onde o alvo anterior terminou, sem sobreposição](figures/windowing_protocol.svg)
+
 ### Resultado medido (teste, forecast encadeado de 12 passos, escala original)
 
 | Fonte da previsão de `vazao_distribuicao` alimentando a cascata | R² de `nivel_res` |
@@ -114,6 +147,29 @@ Ainda não atinge a meta (0,85 médio, cada saída ≥0,8) — falta 0,042 de
 médio, e tanto `nivel_res` (0,758) quanto `pressao` (0,740) continuam abaixo
 de 0,8 — mas é a maior alta de R² médio de toda a busca, e vem sem custo de
 treino adicional.
+
+### Comparação completa por modelo (teste, forecast encadeado)
+
+Cada linha é um membro do ensemble treinado isoladamente, com a mesma
+receita de técnicas (`per_output_heads` + `uncertainty_weighted` +
+RevIN + `mass_balance_feature`, ver `docs/6_tecnicas-de-treino.md`),
+`input_window=24`, `output_window=12`. As duas últimas linhas combinam
+os 5 (`run_mass_balance_cascade_v2.py`, experimento MLflow
+`mimo_sys_mass_balance_cascade`).
+
+| Modelo | `vazao_distribuicao` R² (MSE / SMAPE%) | `nivel_res` R² (MSE / SMAPE%) | `pressao` R² (MSE / SMAPE%) |
+|---|---|---|---|
+| MPNN (seed 42, message_dim=8) | 0,918 (51,6 / 8,1%) | 0,384 (0,031 / 6,7%) | 0,654 (4,97 / 9,6%) |
+| MPNN (seed 42, message_dim=16) | 0,920 (50,1 / 8,2%) | 0,462 (0,027 / 5,2%) | 0,739 (3,75 / 5,8%) |
+| StemGNN (seed 43) | 0,894 (66,4 / 9,6%) | 0,381 (0,031 / 6,2%) | 0,680 (4,59 / 6,2%) |
+| Seq2SeqLatentGNN (seed 42) | 0,873 (79,9 / 10,5%) | 0,453 (0,027 / 6,7%) | 0,682 (4,57 / 6,7%) |
+| Seq2SeqLatentGNN (seed 43) | 0,902 (61,5 / 9,3%) | 0,376 (0,031 / 6,0%) | 0,734 (3,81 / 6,0%) |
+| Ensemble (média dos 5) | 0,929 (44,7 / 7,6%) | 0,508 (0,025 / 5,0%) | 0,740 (3,73 / 5,8%) |
+| **Ensemble + cascata física** | 0,929 (44,7 / 7,6%) | **0,758 (0,012 / 3,3%)** | 0,740 (3,73 / 5,8%) |
+
+Além do R², a cascata também reduz o MSE de `nivel_res` pela metade
+(0,025 → 0,012) e o SMAPE quase pela metade (5,0% → 3,3%) — não é só
+uma métrica melhorando, o erro absoluto cai de forma consistente.
 
 ### Por que não funciona para `pressao`
 
