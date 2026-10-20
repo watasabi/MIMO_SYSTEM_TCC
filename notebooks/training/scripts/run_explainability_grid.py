@@ -1,16 +1,4 @@
-"""Grade ampla de treinos para as duas rotas de extração.
-
-Rota A (equação, `docs/4_rotas-de-extracao.md`): MPNN e
-SymbolicGraphNetwork em `input_window=3`, sempre com `message_l1_weight`
-ligado (sem L1 a destilação não recupera nada — README de
-architectures). Rota B (grafo/acurácia): os mesmos dois modelos em
-`input_window=24`, mais StemGNN e Seq2SeqLatentGNN, que servem como
-referência de acurácia e topologia mas não são destiláveis.
-
-Baseline + as 9 variantes isoladas da ablação de
-`06_tecnicas_de_treino.ipynb` + combinado, 3 seeds cada. Um subprocesso
-por treino: treinar vários modelos no mesmo processo já estourou a RAM
-(`docs/2_split_artigo_vs_dataset_completo.md`).
+"""Grade de treinos das rotas de extração (A: W=3, B: W=24), 3 seeds.
 
 Uso:
     cd notebooks/training

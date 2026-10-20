@@ -1,14 +1,6 @@
-"""Collection Models v1 — split 70/15/15, todos os modelos.
+"""Avalia todos os modelos no split 70/15/15 e registra no MLflow.
 
-Run pai `collection_70_15_15` com uma child run por modelo (2 ARMAX +
-5 redes). Cada child registra métricas por saída e por banda de
-frequência, o plot temporal, o plot espectral e — onde o eixo existir —
-o mapa de attention sobre os lags. O run pai concentra os heatmaps de
-resumo (R² modelo × saída e energia por banda), para não ser preciso
-abrir cada child para comparar.
-
-Lê os pesos de `models/*_70_15_15.pth`; **não treina nada**. A variante
-que treina por fold é `06_collection_models_kfold.py`.
+Carrega os pesos de `models/*_70_15_15.pth`, não treina.
 
 Uso:
     cd notebooks/training

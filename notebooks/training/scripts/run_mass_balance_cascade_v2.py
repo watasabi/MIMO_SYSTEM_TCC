@@ -1,14 +1,4 @@
-"""Log the ensemble + physics-cascade result to MLflow, with plots.
-
-Extends `run_mass_balance_cascade.py`: besides printing metrics, this
-logs two MLflow runs with `log_series`/`log_spectrum` artifacts (PNG +
-HTML, same convention as `train(..., log_plots=True)`), so
-`notebooks/eda/05_mass_balance_cascade_eda.ipynb` has something to
-show:
-
-- `ensemble_ml`: the 5-member ML ensemble alone (R² médio 0.726).
-- `ensemble_cascade`: same `vazao_distribuicao`/`pressao`, `nivel_res`
-  replaced by the physics cascade (R² médio 0.809).
+"""Ensemble com e sem cascata física, registrado no MLflow com plots.
 
 Uso:
     cd notebooks/training

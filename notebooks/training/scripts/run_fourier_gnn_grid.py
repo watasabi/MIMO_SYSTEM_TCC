@@ -1,12 +1,4 @@
-"""Grade de técnicas para o FourierGNN, mesma receita da rota B.
-
-FourierGNN não expõe `encode()` (sem corte limpo de encoder — o FGO é
-um multiplicador compartilhado, não um encoder/decoder separável),
-então fica fora da variante `contrastive`, igual ao StemGNN
-(`run_explainability_grid.py`). Mesmas 8 variantes, `input_window=24`
-(piora em 48/72 — ver `docs/changes/2026-10-15-...`), 3 seeds,
-`save=False`, experimento MLflow `mimo_sys_explainability` (mesmo das
-outras 4 arquiteturas, para comparar lado a lado).
+"""Grade de técnicas de treino para o FourierGNN (W=24, 3 seeds).
 
 Uso:
     cd notebooks/training

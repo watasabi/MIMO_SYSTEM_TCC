@@ -1,20 +1,4 @@
-"""Final recipe: ML ensemble + physics cascade for `nivel_res`.
-
-Trains the same 5-member ensemble as `run_ensemble_r2_push.py`
-(`vazao_distribuicao` R² 0.929, `pressao` R² 0.740), then replaces its
-`nivel_res` prediction with `mass_balance_cascade_forecast`: the
-reservoir's mass-balance gray-box
-(`docs/1_analise-dados-reservatorio.md` §4), fed by the ensemble's own
-`vazao_distribuicao` prediction instead of trying to extrapolate it
-itself. See `src/mimo_sys/training/mass_balance_cascade.py` for why
-this works where a learned leaky integrator (tried and discarded, see
-`docs/changes/2026-10-16-r2-push-experiment.md`) did not: the physics
-is correct, the missing piece was the outflow input during the
-horizon, not a better integrator.
-
-Result (test, chained 12-step forecast): R² vazao=0.929, nivel=0.755,
-pressao=0.740 — mean 0.808, vs. 0.726 for the ML-only ensemble and
-0.618 for the notebook 04 baseline.
+"""Ensemble + cascata física do nível (balanço de massa).
 
 Uso:
     cd notebooks/training

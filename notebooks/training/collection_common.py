@@ -1,14 +1,4 @@
-"""Avaliação e plots comuns aos experimentos `collection_models`.
-
-Usado por `05_collection_models_v1.py` (split 70/15/15, pesos já
-treinados) e `06_collection_models_kfold.py` (TimeSeriesSplit, treina
-um modelo por fold). Mantém num só lugar o contrato de avaliação —
-forecast encadeado de `OUTPUT_WINDOW` passos na escala original — e as
-figuras registradas no MLflow. Constantes, métricas, o forecast
-encadeado e os plots de série/espectro vêm de `mimo_sys.training`
-(`train()` os usa também); aqui ficam só os plots específicos de
-attention/resumo e o logging.
-"""
+"""Avaliação e plots comuns aos scripts `collection_models`."""
 
 from __future__ import annotations
 

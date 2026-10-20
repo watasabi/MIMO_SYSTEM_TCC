@@ -1,14 +1,4 @@
-"""Train the ensemble members behind the R²-push experiment, reproducibly.
-
-`docs/changes/2026-10-16-r2-push-experiment.md` summarises the whole
-branch's findings. This script only trains the final 5-member pool
-that the branch's greedy-forward-selection landed on, logs each
-member's metrics, and prints the ensemble's honest test R² (members
-selected on validation, averaged on test — never selected on test).
-
-Winning recipe per member: MPNN/StemGNN/Seq2SeqLatentGNN with
-`per_output_heads` + `uncertainty_weighted` + RevIN + the explicit
-mass-balance integral feature (`cfg.mass_balance_feature`).
+"""Treina o ensemble de 5 modelos e mede o R² no teste.
 
 Uso:
     cd notebooks/training

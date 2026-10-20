@@ -1,19 +1,4 @@
-"""Retreina baseline + melhor variante de cada modelo, com plots.
-
-A grade de `run_explainability_grid.py` (rota B, `input_window=24`) só
-tinha `save=False` e nenhum plot — boa para comparar métricas, inútil
-para olhar série/espectro. Este script retreina, com `log_plots=True`,
-a config baseline e a melhor variante por R² médio de cada um dos 4
-modelos (`docs/changes/2026-10-14-explainability-training.md`):
-
-    mpnn               -> cosine_clip
-    sgn                -> augment
-    stemgnn            -> huber
-    seq2seq_latent_gnn -> combinado
-
-Experimento MLflow `mimo_sys_collection_v2`, SEED=42 (uma seed — o
-objetivo é comparar visualmente, não repetir o estudo estatístico já
-feito na grade).
+"""Retreina o baseline e a melhor variante de cada modelo, com plots.
 
 Uso:
     cd notebooks/training

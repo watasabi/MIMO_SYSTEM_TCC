@@ -1,16 +1,7 @@
-"""Splits do dataset MIMO completo (2208 amostras, SANEPAR_COMPLETO.txt).
+"""Splits do dataset completo (2208 amostras).
 
-Ao contrário de `01_mimo_dataset_from_papper.ipynb` (que reproduz
-apenas o recorte de 1102 amostras usado no artigo), este script usa a
-série inteira e gera dois esquemas de split para treino/avaliação:
-
-- K-fold de série temporal (`TimeSeriesSplit`) + um holdout de teste
-  final, para validação cruzada respeitando a ordem temporal.
-- Split simples treino/validação/teste cronológico (sem embaralhar),
-  no mesmo espírito do que já era usado em
-  `notebooks/training/01_seq2seq_attention.ipynb`.
-
-Ver `docs/changes/2026-10-02-full-dataset-splits.md`.
+Gera um K-fold temporal com holdout final e um split cronológico
+70/15/15, sem embaralhar.
 """
 
 from pathlib import Path
