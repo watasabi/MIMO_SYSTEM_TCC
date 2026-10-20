@@ -11,14 +11,19 @@ import torchmetrics
 from torch import nn
 
 from mimo_sys.architectures import (
+    LinearEdgeNet,
     MPNNForecaster,
     Seq2SeqLatentGNN,
+    SpectralTFNet,
     StemGNN,
     SymbolicGraphNetwork,
 )
 from mimo_sys.training.augmentations import Batch
 from mimo_sys.training.integrator import LeakyIntegratorWrapper
 from mimo_sys.training.losses import SpectralLoss, UncertaintyWeightedLoss
+from mimo_sys.training.mass_balance_cascade import (
+    mass_balance_cascade_forecast_torch,
+)
 from mimo_sys.training.output_heads import PerOutputHeadWrapper
 from mimo_sys.training.scalers import RevINWrapper
 
@@ -86,6 +91,40 @@ class Forecaster(L.LightningModule):
             you force the optimiser to trade the easy outputs' error
             for the hard one's, instead of letting it find its own
             balance.
+        flow_integral_weight: Weight of `MSE(cumsum(pred - target))`
+            on output `flow_integral_idx` over the horizon — a cheap
+            proxy that penalises a per-window *drift* in that output's
+            error, not just its instantaneous size (0 disables).
+        flow_integral_idx: Which output channel (index into `pred`'s
+            last dim) `flow_integral_weight` applies to.
+        cascade_weight: Weight of the physics-cascade loss
+            (`mass_balance_cascade.mass_balance_cascade_forecast_torch`)
+            — trains the `cascade_vazao_idx` output *through* the mass
+            -balance cascade against the true `nivel_res`, instead of
+            combining the two post-hoc (see
+            `docs/7_tecnica-cascata-fisica.md`). Needs `cascade_a`/
+            `cascade_b` (from `mass_balance_cascade.fit_mass_balance`,
+            fit on the preprocessor's output space) and the dataset's
+            `y` to carry one extra trailing column with the known
+            future inflow (0 disables; the extra `y` column is then
+            not required).
+        cascade_a: Mass-balance gray-box slope, fit on the scaled
+            (preprocessor output) space.
+        cascade_b: Mass-balance gray-box intercept, same space.
+        cascade_vazao_idx: Index into `pred`'s last dim of the output
+            fed into the cascade as the predicted outflow.
+        cascade_nivel_idx: Index into `pred`'s last dim (and into
+            `y`'s target columns) of `nivel_res`, the cascade's target.
+        cascade_level_col: Index into `x`'s node dim of `nivel_res`,
+            to read the window's level anchor
+            (`x[:, cascade_anchor_step, col]`).
+        cascade_inflow_col: Index into `x`'s node dim of
+            `vazao_entrada`, for the anchor imbalance.
+        cascade_outflow_col: Index into `x`'s node dim of
+            `vazao_distribuicao`, for the anchor imbalance.
+        cascade_anchor_step: Time index into `x` of the last observed
+            step (`-1`, or `input_window - 1` when `x` also carries
+            the known future inputs, see `data.with_future_exog`).
     """
 
     def __init__(  # noqa: PLR0913, PLR0917 - every knob is a config field
@@ -106,6 +145,17 @@ class Forecaster(L.LightningModule):
         uncertainty_weighted: bool = False,
         n_targets: int | None = None,
         output_weights: torch.Tensor | None = None,
+        flow_integral_weight: float = 0.0,
+        flow_integral_idx: int = 0,
+        cascade_weight: float = 0.0,
+        cascade_a: float = 0.0,
+        cascade_b: float = 0.0,
+        cascade_vazao_idx: int = 0,
+        cascade_nivel_idx: int = 1,
+        cascade_level_col: int = 0,
+        cascade_inflow_col: int = 0,
+        cascade_outflow_col: int = 0,
+        cascade_anchor_step: int = -1,
     ) -> None:
         super().__init__()
         self.save_hyperparameters(
@@ -170,6 +220,10 @@ class Forecaster(L.LightningModule):
             core, (MPNNForecaster, SymbolicGraphNetwork)
         ):
             aux += hp.message_l1_weight * core.message_l1()
+        if hp.message_l1_weight > 0 and isinstance(
+            core, (LinearEdgeNet, SpectralTFNet)
+        ):
+            aux += hp.message_l1_weight * core.group_l1()
         if hp.backcast_weight > 0 and isinstance(core, StemGNN):
             aux += hp.backcast_weight * core.backcast_loss(seen)
         return aux
@@ -181,6 +235,12 @@ class Forecaster(L.LightningModule):
         training = stage == "train"
         if training and self.augment is not None:
             x, y = self.augment(x, y)
+
+        # `y` carries one extra trailing column (the known future
+        # `vazao_entrada`) when `cascade_weight > 0` — never fed to
+        # the model, only used below for the cascade loss.
+        n_targets = self.hparams.n_targets or y.shape[-1]
+        y, exog = y[..., :n_targets], y[..., n_targets:]
 
         tf = self.hparams.teacher_forcing_ratio
         if training and tf > 0 and isinstance(self.core, Seq2SeqLatentGNN):
@@ -215,6 +275,33 @@ class Forecaster(L.LightningModule):
             loss = self.loss_fn(pred, y)
         if self.spectral is not None:
             loss += self.hparams.spectral_weight * self.spectral(pred, y)
+        if self.hparams.flow_integral_weight > 0:
+            idx = self.hparams.flow_integral_idx
+            err = pred[..., idx] - y[..., idx]
+            loss += (
+                self.hparams.flow_integral_weight
+                * torch.cumsum(err, dim=1).pow(2).mean()
+            )
+        if self.hparams.cascade_weight > 0:
+            hp = self.hparams
+            cascade_nivel = mass_balance_cascade_forecast_torch(
+                level_anchor=x[
+                    :, hp.cascade_anchor_step, hp.cascade_level_col
+                ],
+                inflow=exog[..., 0],
+                predicted_outflow=pred[..., hp.cascade_vazao_idx],
+                a=hp.cascade_a,
+                b=hp.cascade_b,
+                last_imbalance=(
+                    x[:, hp.cascade_anchor_step, hp.cascade_inflow_col]
+                    - x[:, hp.cascade_anchor_step, hp.cascade_outflow_col]
+                ),
+            )
+            cascade_loss = self.loss_fn(
+                cascade_nivel, y[..., hp.cascade_nivel_idx]
+            )
+            loss += hp.cascade_weight * cascade_loss
+            self.log(f"{stage}_cascade_loss", cascade_loss, on_epoch=True)
         if training:
             loss += self._aux_loss(x)
 

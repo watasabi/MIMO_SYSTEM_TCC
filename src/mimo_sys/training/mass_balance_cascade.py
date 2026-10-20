@@ -38,8 +38,13 @@ from __future__ import annotations
 
 import numpy as np
 import numpy.typing as npt
+import torch
 
-__all__ = ["fit_mass_balance", "mass_balance_cascade_forecast"]
+__all__ = [
+    "fit_mass_balance",
+    "mass_balance_cascade_forecast",
+    "mass_balance_cascade_forecast_torch",
+]
 
 
 def fit_mass_balance(
@@ -114,3 +119,42 @@ def mass_balance_cascade_forecast(
     return np.asarray(level_anchor, dtype=float)[:, None] + np.cumsum(
         delta, axis=1
     )
+
+
+def mass_balance_cascade_forecast_torch(
+    level_anchor: torch.Tensor,
+    inflow: torch.Tensor,
+    predicted_outflow: torch.Tensor,
+    a: float,
+    b: float,
+    last_imbalance: torch.Tensor,
+) -> torch.Tensor:
+    """Autograd version of `mass_balance_cascade_forecast`.
+
+    Same formula, differentiable w.r.t. `predicted_outflow` — used to
+    train a forecaster's `vazao_distribuicao` head *through* the
+    cascade, instead of combining the two post-hoc: the gradient of
+    the `nivel_res` error reaches the outflow prediction, pushing the
+    outflow forecast's own integrated (cumulative) error toward zero,
+    which is what the cascade's accuracy actually depends on (see
+    `docs/7_tecnica-cascata-fisica.md`). `a`/`b` stay fixed constants
+    fit once by `fit_mass_balance` (not learned here); only the
+    forecaster's weights receive gradient from this loss.
+
+    Args:
+        level_anchor: `(batch,)`.
+        inflow: `(batch, horizon)`, known future `vazao_entrada`.
+        predicted_outflow: `(batch, horizon)`, the forecaster's own
+            `vazao_distribuicao` prediction — the only tensor this
+            needs gradient through.
+        a: From `fit_mass_balance`.
+        b: From `fit_mass_balance`.
+        last_imbalance: `(batch,)`.
+
+    Returns:
+        `(batch, horizon)` `nivel_res` forecast.
+    """
+    q = inflow - predicted_outflow
+    q_prev = torch.cat([last_imbalance[:, None], q[:, :-1]], dim=1)
+    delta = a * (q + q_prev) / 2.0 + b
+    return level_anchor[:, None] + torch.cumsum(delta, dim=1)

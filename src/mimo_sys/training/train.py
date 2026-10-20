@@ -41,8 +41,10 @@ from torch import nn
 
 from mimo_sys.architectures import (
     FourierGNN,
+    LinearEdgeNet,
     MPNNForecaster,
     Seq2SeqLatentGNN,
+    SpectralTFNet,
     StemGNN,
     SymbolicGraphNetwork,
 )
@@ -74,6 +76,7 @@ from mimo_sys.training.data import (
     TARGET_IDX,
     load_splits,
     make_loaders,
+    with_future_exog,
 )
 from mimo_sys.training.evaluation import (
     band_table,
@@ -94,6 +97,7 @@ from mimo_sys.training.losses import (
     decaying_freq_weights,
     seasonal_naive_scale,
 )
+from mimo_sys.training.mass_balance_cascade import fit_mass_balance
 from mimo_sys.training.output_heads import PerOutputHeadWrapper
 from mimo_sys.training.scalers import RevINMode, RevINWrapper
 
@@ -103,6 +107,8 @@ ARCHITECTURES: dict[str, type[nn.Module]] = {
     "stemgnn": StemGNN,
     "seq2seq_latent_gnn": Seq2SeqLatentGNN,
     "fourier_gnn": FourierGNN,
+    "linear_edge_net": LinearEdgeNet,
+    "spectral_tf_net": SpectralTFNet,
 }
 
 # Baseline of notebooks 04/05: MinMax fitted on train, nothing else.
@@ -181,6 +187,11 @@ class TrainConfig:
     spectral_weight: float = 0.0
     spectral_cutoff_period: float | None = None
     spectral_decay: float = 2.0
+    flow_integral_weight: float = 0.0
+    flow_integral_idx: int = 0
+    cascade_weight: float = 0.0
+    future_exog: bool = False
+    accumulate_grad_batches: int = 1
     message_l1_weight: float = 0.0
     backcast_weight: float = 1.0
     teacher_forcing_ratio: float = 0.0
@@ -281,13 +292,20 @@ def _windows(
     """
     splits = add_derived_features(cfg, splits)
 
+    # With `cascade_weight > 0`, `y` carries one extra trailing column
+    # (known future `vazao_entrada`) for `Forecaster`'s cascade loss —
+    # see `mass_balance_cascade.mass_balance_cascade_forecast_torch`.
+    feats = list(TARGET_IDX)
+    if cfg.cascade_weight > 0:
+        feats += [INPUT_COLS.index("vazao_entrada")]
+
     pp = TimeSeriesPreprocessor(
         window_size=cfg.input_window,
         horizon=cfg.output_window,
         plot=False,
         **cfg.preprocessor,
     )
-    X_tr, y_tr, processed = pp.fit_transform(splits["train"], feats=TARGET_IDX)
+    X_tr, y_tr, processed = pp.fit_transform(splits["train"])
     raw = np.concatenate([splits["train"], splits["val"], splits["test"]])
     train_end = len(splits["train"])
     val_end = train_end + len(splits["val"])
@@ -295,10 +313,11 @@ def _windows(
     test_seg = raw[val_end - cfg.input_window :]
     windows = {"train": (X_tr, y_tr)}
     for name, seg in (("val", val_seg), ("test", test_seg)):
-        X, y = pp.transform(seg)
-        windows[name] = (X, y[:, :, TARGET_IDX])
-    train_targets = processed[:, TARGET_IDX]
-    return pp, windows, test_seg, train_targets
+        windows[name] = pp.transform(seg)
+    for name, (X, y) in windows.items():
+        X_seen = with_future_exog(X, y) if cfg.future_exog else X
+        windows[name] = (X_seen, y[:, :, feats])
+    return pp, windows, test_seg, processed
 
 
 def train(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
@@ -307,15 +326,19 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
     """Train, evaluate and log one model. See module docstring."""
     L.seed_everything(cfg.seed, workers=True)
     splits = load_splits(cfg.data_prefix)
-    pp, windows, test_seg, train_targets = _windows(cfg, splits)
+    pp, windows, test_seg, processed = _windows(cfg, splits)
+    train_targets = processed[:, TARGET_IDX]
     loaders = make_loaders(windows, cfg.batch_size)
 
     n_nodes = N_NODES
     if cfg.mass_balance_feature:
         n_nodes += 1 + bool(cfg.mass_balance_ewma_span)
+    # With `future_exog`, every window is `input_window + output_window`
+    # long (past + known future inputs, see `data.with_future_exog`).
+    seen_window = cfg.input_window + cfg.output_window * cfg.future_exog
     model = build_model(
         cfg.model,
-        cfg.input_window,
+        seen_window,
         cfg.output_window,
         n_nodes,
         **cfg.model_kwargs,
@@ -334,6 +357,16 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
             model, len(TARGET_IDX), hidden=cfg.per_output_heads_hidden
         )
 
+    cascade_a, cascade_b = (
+        fit_mass_balance(
+            train_targets[:, 1],
+            processed[:, INPUT_COLS.index("vazao_entrada")],
+            train_targets[:, 0],
+        )
+        if cfg.cascade_weight > 0
+        else (0.0, 0.0)
+    )
+    # (train_targets/processed are both train-split arrays, same rows)
     loss_kwargs = dict(cfg.loss_kwargs)
     if cfg.loss == "mase":
         loss_kwargs["scale"] = seasonal_naive_scale(train_targets)
@@ -395,8 +428,23 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
             backcast_weight=cfg.backcast_weight,
             teacher_forcing_ratio=cfg.teacher_forcing_ratio,
             uncertainty_weighted=cfg.uncertainty_weighted,
-            n_targets=len(TARGET_IDX) if cfg.uncertainty_weighted else None,
+            n_targets=(
+                len(TARGET_IDX)
+                if cfg.uncertainty_weighted or cfg.cascade_weight > 0
+                else None
+            ),
             output_weights=cfg.output_weights,
+            flow_integral_weight=cfg.flow_integral_weight,
+            flow_integral_idx=cfg.flow_integral_idx,
+            cascade_weight=cfg.cascade_weight,
+            cascade_a=cascade_a,
+            cascade_b=cascade_b,
+            cascade_vazao_idx=0,
+            cascade_nivel_idx=1,
+            cascade_level_col=TARGET_IDX[1],
+            cascade_inflow_col=INPUT_COLS.index("vazao_entrada"),
+            cascade_outflow_col=TARGET_IDX[0],
+            cascade_anchor_step=cfg.input_window - 1,
         )
         checkpoint = MLflowModelCheckpoint(
             dirpath=ckpt_dir, monitor="val_mse", mode="min", save_top_k=1
@@ -417,6 +465,7 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
             max_epochs=cfg.max_epochs,
             accelerator=cfg.accelerator,
             gradient_clip_val=cfg.gradient_clip_val,
+            accumulate_grad_batches=cfg.accumulate_grad_batches,
             callbacks=callbacks,
             logger=False,
             enable_progress_bar=cfg.progress,
@@ -440,6 +489,7 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
             device=module.device,
             input_window=cfg.input_window,
             output_window=cfg.output_window,
+            future_exog=cfg.future_exog,
         )
         y_true = test_seg[cfg.input_window : cfg.input_window + len(y_pred)][
             :, TARGET_IDX

@@ -397,6 +397,30 @@ def test_train_ponta_a_ponta_com_todas_tecnicas(mlflow_tmp: None) -> None:
     assert result.best_val_mse > 0
 
 
+def test_train_com_cascade_weight(mlflow_tmp: None) -> None:
+    """`TrainConfig(cascade_weight=...)`: `_windows` adds the extra
+    inflow column to `y` and the run completes end to end."""
+    from mimo_sys.training import TrainConfig, train  # noqa: PLC0415
+    from mimo_sys.training.data import N_TARGETS  # noqa: PLC0415
+
+    result = train(
+        TrainConfig(
+            model="mpnn",
+            model_kwargs={"hidden_size": 16, "message_dim": 4},
+            revin="standard",
+            per_output_heads=True,
+            cascade_weight=0.5,
+            max_epochs=2,
+            accelerator="cpu",
+            experiment="test",
+            save=False,
+        )
+    )
+    assert result.y_pred.shape == result.y_true.shape
+    assert result.y_pred.shape[1] == N_TARGETS
+    assert result.metrics["r2"].notna().all()
+
+
 def test_tune_dois_trials(mlflow_tmp: None) -> None:
     optuna = pytest.importorskip("optuna")
     from mimo_sys.training import TrainConfig  # noqa: PLC0415
@@ -800,3 +824,118 @@ def test_mass_balance_cascade_forecast_reproduz_a_simulacao() -> None:  # noqa: 
     )
     true_windows = np.stack([level[t + 1 : t + 1 + horizon] for t in anchors])
     np.testing.assert_allclose(forecast, true_windows, atol=1e-6)
+
+
+def test_mass_balance_cascade_forecast_torch_bate_a_versao_numpy() -> None:
+    from mimo_sys.training.mass_balance_cascade import (  # noqa: PLC0415
+        mass_balance_cascade_forecast,
+        mass_balance_cascade_forecast_torch,
+    )
+
+    rng = np.random.default_rng(2)
+    n_windows, horizon = 5, 12
+    level_anchor = rng.normal(size=n_windows)
+    inflow = rng.normal(loc=10, size=(n_windows, horizon))
+    outflow = rng.normal(loc=9, size=(n_windows, horizon))
+    last_imbalance = rng.normal(size=n_windows)
+    a, b = 0.003, 0.01
+
+    numpy_out = mass_balance_cascade_forecast(
+        level_anchor, inflow, outflow, a, b, last_imbalance=last_imbalance
+    )
+    outflow_t = torch.as_tensor(outflow, dtype=torch.float64).requires_grad_()
+    torch_out = mass_balance_cascade_forecast_torch(
+        torch.as_tensor(level_anchor, dtype=torch.float64),
+        torch.as_tensor(inflow, dtype=torch.float64),
+        outflow_t,
+        a,
+        b,
+        torch.as_tensor(last_imbalance, dtype=torch.float64),
+    )
+    np.testing.assert_allclose(
+        torch_out.detach().numpy(), numpy_out, atol=1e-10
+    )
+    # Gradient reaches the predicted outflow (the whole point: training
+    # through the cascade pushes the outflow head to integrate right).
+    torch_out.sum().backward()
+    assert torch_out.grad_fn is not None
+
+
+def test_forecaster_cascade_weight_treina_e_loga_cascade_loss() -> None:
+    """`cascade_weight > 0` roda via `Trainer.fit` e loga a loss da cascata.
+
+    `y`'s last column is the known future inflow, never fed to the
+    model — only `TARGET_IDX` worth of channels reach it.
+    """
+    from mimo_sys.training.forecaster import Forecaster  # noqa: PLC0415
+
+    torch.manual_seed(SEED)
+    n = 32
+    x = torch.randn(n, INPUT_WINDOW, N_NODES)
+    y = torch.randn(n, OUTPUT_WINDOW, len(TARGET_IDX) + 1)
+    train_loader = DataLoader(TensorDataset(x, y), batch_size=BATCH)
+
+    model = build("mpnn", hidden_size=16, message_dim=4)
+    module = Forecaster(
+        model,
+        n_targets=len(TARGET_IDX),
+        cascade_weight=1.0,
+        cascade_a=0.01,
+        cascade_b=0.0,
+        cascade_vazao_idx=0,
+        cascade_nivel_idx=1,
+        cascade_level_col=TARGET_IDX[1],
+        cascade_inflow_col=INPUT_IDX[-1],
+        cascade_outflow_col=TARGET_IDX[0],
+    )
+    quick_trainer(max_epochs=1).fit(module, train_loader, train_loader)
+    assert "train_cascade_loss" in module.trainer.callback_metrics
+    assert torch.isfinite(module.trainer.callback_metrics["train_loss"])
+
+
+# ------------------------------------------------- known future inputs
+
+
+def test_with_future_exog_zera_tudo_que_nao_e_entrada() -> None:
+    """Prova de não-vazamento: no trecho futuro de `x` só sobrevivem as
+    entradas conhecidas; saídas e features derivadas delas viram zero."""
+    from mimo_sys.training.data import (  # noqa: PLC0415
+        INPUT_IDX,
+        with_future_exog,
+    )
+
+    rng = np.random.default_rng(0)
+    n_cols = N_NODES + 1  # + mass-balance integral, built from outputs
+    past = rng.normal(size=(5, INPUT_WINDOW, n_cols))
+    future = rng.normal(size=(5, OUTPUT_WINDOW, n_cols))
+    x = with_future_exog(past, future)
+    assert x.shape == (5, INPUT_WINDOW + OUTPUT_WINDOW, n_cols)
+    np.testing.assert_array_equal(x[:, :INPUT_WINDOW], past)
+    tail = x[:, INPUT_WINDOW:]
+    np.testing.assert_array_equal(tail[..., INPUT_IDX], future[..., INPUT_IDX])
+    others = [c for c in range(n_cols) if c not in INPUT_IDX]
+    assert (tail[..., others] == 0).all()
+
+
+def test_train_spectral_tf_net_com_futuro_e_cascata(mlflow_tmp: None) -> None:
+    from mimo_sys.training import TrainConfig, train  # noqa: PLC0415
+    from mimo_sys.training.data import N_TARGETS  # noqa: PLC0415
+
+    result = train(
+        TrainConfig(
+            model="spectral_tf_net",
+            model_kwargs={"n_bands": 6, "n_regimes": 2},
+            future_exog=True,
+            mass_balance_feature=True,
+            cascade_weight=0.5,
+            message_l1_weight=1e-3,
+            accumulate_grad_batches=2,
+            max_epochs=2,
+            accelerator="cpu",
+            experiment="test",
+            save=False,
+        )
+    )
+    assert result.y_pred.shape == result.y_true.shape
+    assert result.y_pred.shape[1] == N_TARGETS
+    assert result.metrics["r2"].notna().all()

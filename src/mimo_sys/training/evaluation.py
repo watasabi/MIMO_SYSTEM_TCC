@@ -26,6 +26,7 @@ from mimo_sys.training.data import (
     OUTPUT_COLS,
     OUTPUT_WINDOW,
     TARGET_IDX,
+    with_future_exog,
 )
 
 LABELS = ["Vazão de distribuição (l/s)", "Nível (m)", "Pressão (mca)"]
@@ -120,6 +121,7 @@ def chained_forecast(
     seq_first: bool = False,
     input_window: int = INPUT_WINDOW,
     output_window: int = OUTPUT_WINDOW,
+    future_exog: bool = False,
 ) -> npt.NDArray:
     """Chained `output_window`-step forecast in the original scale.
 
@@ -135,6 +137,9 @@ def chained_forecast(
         seq_first: Model takes `(window, batch, nodes)`.
         input_window: Lag window the model was trained with.
         output_window: Forecast horizon the model was trained with.
+        future_exog: Model was trained with the known future inputs
+            appended (`data.with_future_exog`); `raw` must then also
+            cover `stop`'s last horizon.
 
     Returns:
         `(n_steps, n_targets)` predictions for rows
@@ -147,9 +152,12 @@ def chained_forecast(
     # One window per call: StemGNN aggregates its adjacency over the
     # batch, so batching windows would change its forecasts.
     for t0 in anchors:
-        window = torch.as_tensor(
-            series[t0 - input_window : t0], dtype=torch.float32
-        ).to(device)
+        window = series[t0 - input_window : t0]
+        if future_exog:
+            window = with_future_exog(
+                window[None], series[None, t0 : t0 + output_window]
+            )[0]
+        window = torch.as_tensor(window, dtype=torch.float32).to(device)
         with torch.no_grad():
             if seq_first:
                 out = model(window.unsqueeze(1)).squeeze(1)

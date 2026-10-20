@@ -53,6 +53,27 @@ def load_splits(
     }
 
 
+def with_future_exog(past: npt.NDArray, future: npt.NDArray) -> npt.NDArray:
+    """Append the known future exogenous inputs to input windows.
+
+    Only `INPUT_IDX` (`freq_b1..3`, `vazao_entrada`) is known ahead of
+    time; every other column of `future` — the outputs, and any derived
+    feature built from them (e.g. the mass-balance integral) — is
+    zeroed, so the horizon never leaks into the input.
+
+    Args:
+        past: `(n, input_window, n_cols)` input windows.
+        future: `(n, output_window, n_cols)` the same rows' horizon,
+            all columns, in the same (preprocessed) space.
+
+    Returns:
+        `(n, input_window + output_window, n_cols)`.
+    """
+    known = np.zeros_like(future)
+    known[..., INPUT_IDX] = future[..., INPUT_IDX]
+    return np.concatenate([past, known], axis=1)
+
+
 class WindowDataset(Dataset):
     """`(x, y)` windows already produced by the preprocessor.
 
