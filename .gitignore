@@ -28,3 +28,10 @@ outputs/
 .vscode/
 .idea/
 
+
+# Material local, fora do repositório
+CHANGELOG.md
+overleaf/
+docs/changes/
+docs/pappers/
+docs/.explanation_code/
