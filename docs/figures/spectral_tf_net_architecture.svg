@@ -1,0 +1,119 @@
+<svg viewBox="0 0 1200 760" xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="SpectralTFNet: a janela passada dos 7 nós e as entradas conhecidas no horizonte formam uma sequência por nó; cada sequência vai para o domínio da frequência; cada aresta de um nó emissor para uma saída é uma resposta em frequência aprendida, misturada entre regimes de bombas por um gate; as contribuições são somadas e voltam ao tempo pela FFT inversa; a vazão prevista alimenta a cascata física do nível; a extração lê a resposta ao impulso de cada aresta e a força por banda de frequência.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333333"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e7d46"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2f5aa8"/>
+    </marker>
+    <marker id="arrow-dashed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#888888"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="760" fill="#ffffff"/>
+
+  <text x="20" y="28" font-family="sans-serif" font-size="17" font-weight="600" fill="#111111">SpectralTFNet: grafo de funções de transferência no domínio da frequência</text>
+  <text x="20" y="48" font-family="sans-serif" font-size="12" fill="#555555">aresta j → i = resposta em frequência aprendida H_ij(f); a equação é a resposta ao impulso h_ij = iFFT(H_ij)</text>
+
+  <!-- 1. Input sequence -->
+  <rect x="20" y="75" width="560" height="120" rx="8" fill="#f4f6fa" stroke="#9aa7bd"/>
+  <text x="34" y="97" font-family="sans-serif" font-size="13" font-weight="600" fill="#222222">1. Sequência por nó s_j (comprimento W + H)</text>
+  <rect x="40" y="110" width="330" height="34" fill="#dfe7f5" stroke="#7d90b5"/>
+  <text x="205" y="132" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#222222">passado [t−W, t): u1..u4, y1..y3 (7 nós)</text>
+  <rect x="370" y="110" width="190" height="34" fill="#e3f1e7" stroke="#6fa37f"/>
+  <text x="465" y="132" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#222222">horizonte [t, t+H)</text>
+  <text x="40" y="166" font-family="sans-serif" font-size="11.5" fill="#444444">no horizonte: entradas u1..u4 conhecidas (bombas, vazão de entrada);</text>
+  <text x="40" y="182" font-family="sans-serif" font-size="11.5" fill="#444444">saídas y1..y3 e features derivadas delas = 0 (sem vazamento)</text>
+
+  <!-- 2. Normalisation + FFT -->
+  <rect x="640" y="75" width="540" height="120" rx="8" fill="#f4f6fa" stroke="#9aa7bd"/>
+  <text x="654" y="97" font-family="sans-serif" font-size="13" font-weight="600" fill="#222222">2. Normalização (só o passado) + RFFT</text>
+  <text x="654" y="122" font-family="sans-serif" font-size="12" fill="#333333">μ, σ por nó calculados em [t−W, t)</text>
+  <text x="654" y="142" font-family="sans-serif" font-size="12" fill="#333333">S_j(f) = RFFT(s_j), zero-padding 2×(W+H) → convolução linear</text>
+  <text x="654" y="162" font-family="sans-serif" font-size="12" fill="#333333">menor frequência visível: f_min = 1/(W+H)</text>
+  <text x="654" y="182" font-family="sans-serif" font-size="11.5" fill="#666666">(por isso a janela W, não o batch, controla a baixa frequência)</text>
+  <line x1="580" y1="135" x2="636" y2="135" stroke="#333333" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- 3. Spectral graph -->
+  <rect x="20" y="225" width="1160" height="210" rx="8" fill="#fbf7ef" stroke="#c9a96a"/>
+  <text x="34" y="248" font-family="sans-serif" font-size="13" font-weight="600" fill="#222222">3. Grafo espectral: cada aresta é um filtro</text>
+  <line x1="910" y1="195" x2="910" y2="221" stroke="#333333" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- gate -->
+  <rect x="40" y="265" width="300" height="150" rx="6" fill="#ffffff" stroke="#c9a96a"/>
+  <text x="190" y="287" text-anchor="middle" font-family="sans-serif" font-size="12.5" font-weight="600" fill="#222222">gate de regime das bombas</text>
+  <text x="190" y="312" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#333333">g = softmax(W · média(b1, b2, b3))</text>
+  <text x="190" y="334" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#333333">K bancos de respostas H^(k)</text>
+  <text x="190" y="356" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#333333">H_ij(f) = Σ_k g_k · H_ij^(k)(f)</text>
+  <text x="190" y="386" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#666666">um regime liga/desliga = uma função</text>
+  <text x="190" y="401" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#666666">de transferência própria (alvo: pressão)</text>
+  <line x1="340" y1="340" x2="396" y2="340" stroke="#333333" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- edges -->
+  <rect x="400" y="265" width="420" height="150" rx="6" fill="#ffffff" stroke="#c9a96a"/>
+  <text x="610" y="287" text-anchor="middle" font-family="sans-serif" font-size="12.5" font-weight="600" fill="#222222">arestas emissor j → saída i</text>
+  <g font-family="sans-serif" font-size="11" fill="#222222">
+    <circle cx="450" cy="315" r="13" fill="#dfe7f5" stroke="#7d90b5"/><text x="450" y="319" text-anchor="middle">u1</text>
+    <circle cx="450" cy="347" r="13" fill="#dfe7f5" stroke="#7d90b5"/><text x="450" y="351" text-anchor="middle">u4</text>
+    <circle cx="450" cy="379" r="13" fill="#dfe7f5" stroke="#7d90b5"/><text x="450" y="383" text-anchor="middle">y1</text>
+    <circle cx="760" cy="315" r="13" fill="#e3f1e7" stroke="#6fa37f"/><text x="760" y="319" text-anchor="middle">ŷ1</text>
+    <circle cx="760" cy="379" r="13" fill="#e3f1e7" stroke="#6fa37f"/><text x="760" y="383" text-anchor="middle">ŷ3</text>
+  </g>
+  <g stroke="#b5873a" stroke-width="1.3">
+    <line x1="463" y1="315" x2="747" y2="315"/>
+    <line x1="463" y1="347" x2="747" y2="317"/>
+    <line x1="463" y1="379" x2="747" y2="319"/>
+    <line x1="463" y1="315" x2="747" y2="377"/>
+    <line x1="463" y1="347" x2="747" y2="379"/>
+    <line x1="463" y1="379" x2="747" y2="381"/>
+  </g>
+  <rect x="560" y="330" width="100" height="22" rx="4" fill="#fff4dd" stroke="#b5873a"/>
+  <text x="610" y="345" text-anchor="middle" font-family="sans-serif" font-size="11.5" fill="#222222">× H_ij(f)</text>
+  <text x="610" y="405" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#666666">H_ij: M bandas log-espaçadas, interpoladas (poucos parâmetros)</text>
+
+  <!-- sum + iFFT -->
+  <rect x="880" y="265" width="280" height="150" rx="6" fill="#ffffff" stroke="#c9a96a"/>
+  <text x="1020" y="287" text-anchor="middle" font-family="sans-serif" font-size="12.5" font-weight="600" fill="#222222">soma + FFT inversa</text>
+  <text x="1020" y="314" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#333333">Y_i(f) = Σ_j H_ij(f) · S_j(f)</text>
+  <text x="1020" y="338" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#333333">ŷ_i = últimos H de iRFFT(Y_i) + b_i</text>
+  <text x="1020" y="362" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#333333">(+ resíduo não-linear pequeno, opcional)</text>
+  <text x="1020" y="392" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#666666">desnormaliza com μ, σ do passado</text>
+  <line x1="820" y1="340" x2="876" y2="340" stroke="#333333" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- 4. Outputs + cascade -->
+  <rect x="20" y="470" width="740" height="140" rx="8" fill="#eef6f0" stroke="#6fa37f"/>
+  <text x="34" y="493" font-family="sans-serif" font-size="13" font-weight="600" fill="#222222">4. Saídas e cascata física do nível</text>
+  <line x1="1020" y1="415" x2="1020" y2="450" stroke="#2e7d46" stroke-width="1.6"/>
+  <line x1="1020" y1="450" x2="400" y2="450" stroke="#2e7d46" stroke-width="1.6"/>
+  <line x1="400" y1="450" x2="400" y2="466" stroke="#2e7d46" stroke-width="1.6" marker-end="url(#arrow-green)"/>
+  <rect x="40" y="508" width="200" height="40" rx="5" fill="#ffffff" stroke="#6fa37f"/>
+  <text x="140" y="533" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#222222">ŷ vazão de distribuição</text>
+  <rect x="40" y="558" width="200" height="40" rx="5" fill="#ffffff" stroke="#6fa37f"/>
+  <text x="140" y="583" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#222222">ŷ pressão</text>
+  <line x1="240" y1="528" x2="296" y2="528" stroke="#2e7d46" stroke-width="1.6" marker-end="url(#arrow-green)"/>
+  <rect x="300" y="508" width="440" height="90" rx="5" fill="#ffffff" stroke="#6fa37f"/>
+  <text x="520" y="530" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="600" fill="#222222">cascata diferenciável (balanço de massa)</text>
+  <text x="520" y="553" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#333333">nível = âncora + cumsum( a · média(u4 − ŷ_vazão) + b )</text>
+  <text x="520" y="576" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#666666">o gradiente do erro do nível volta até a resposta da vazão</text>
+  <text x="520" y="591" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#666666">→ penaliza o erro de baixa frequência (o que a cascata integra)</text>
+
+  <!-- loss -->
+  <rect x="790" y="470" width="390" height="140" rx="8" fill="#f4f6fa" stroke="#9aa7bd"/>
+  <text x="804" y="493" font-family="sans-serif" font-size="13" font-weight="600" fill="#222222">Loss</text>
+  <text x="804" y="520" font-family="sans-serif" font-size="12" fill="#333333">MSE(vazão) + MSE(pressão) + MSE(nível) (pesos aprendidos)</text>
+  <text x="804" y="542" font-family="sans-serif" font-size="12" fill="#333333">+ λ · MSE(nível da cascata)</text>
+  <text x="804" y="564" font-family="sans-serif" font-size="12" fill="#333333">+ ρ · sparse-group-lasso(‖H_ij‖ por banda)</text>
+  <text x="804" y="592" font-family="sans-serif" font-size="11" fill="#666666">lasso: zera arestas inteiras ou só bandas de uma aresta</text>
+
+  <!-- 5. Extraction -->
+  <rect x="20" y="640" width="1160" height="105" rx="8" fill="#f7f1f8" stroke="#a786b0"/>
+  <text x="34" y="663" font-family="sans-serif" font-size="13" font-weight="600" fill="#222222">5. Extração (sem regressão simbólica)</text>
+  <text x="34" y="690" font-family="sans-serif" font-size="12" fill="#333333">Rota A, equação: h_ij = iFFT(H_ij) → ŷ_i(t) = Σ_j Σ_τ h_ij(τ) · s_j(t−τ) + b_i, uma função de transferência MIMO (classe ARX/ARMAX)</text>
+  <text x="34" y="712" font-family="sans-serif" font-size="12" fill="#333333">Rota B, grafo: ‖H_ij‖ em cada banda → um grafo de acoplamento por faixa de frequência (ex.: ciclo diário vs. tendência)</text>
+  <text x="34" y="734" font-family="sans-serif" font-size="12" fill="#333333">Regimes: g_k mostra qual configuração de bombas está ativa e qual banco de respostas foi usado</text>
+</svg>
