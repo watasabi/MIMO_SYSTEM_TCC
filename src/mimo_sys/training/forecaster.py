@@ -27,7 +27,37 @@ from mimo_sys.training.mass_balance_cascade import (
 from mimo_sys.training.output_heads import PerOutputHeadWrapper
 from mimo_sys.training.scalers import RevINWrapper
 
+# Seasonal period (h) of the inflow guess when it is not a known input.
+SEASON = 24
+
 _WRAPPERS = (RevINWrapper, LeakyIntegratorWrapper, PerOutputHeadWrapper)
+
+
+def build_optimizer(
+    params: object,
+    name: str,
+    lr: float,
+    weight_decay: float,
+    momentum: float,
+) -> torch.optim.Optimizer:
+    """`adam`, `adamw`, `rmsprop`, or `sgd_nesterov`."""
+    if name == "adam":
+        return torch.optim.Adam(params, lr=lr, weight_decay=weight_decay)
+    if name == "adamw":
+        return torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
+    if name == "rmsprop":
+        return torch.optim.RMSprop(
+            params, lr=lr, weight_decay=weight_decay, momentum=momentum
+        )
+    if name == "sgd_nesterov":
+        return torch.optim.SGD(
+            params,
+            lr=lr,
+            weight_decay=weight_decay,
+            momentum=momentum,
+            nesterov=True,
+        )
+    raise ValueError(f"unknown optimizer: {name!r}")
 
 
 def _unwrap(model: nn.Module) -> nn.Module:
@@ -58,7 +88,10 @@ class Forecaster(L.LightningModule):
             optionally wrapped in `RevINWrapper`.
         loss: Point loss on the forecast (see `losses.build_loss`).
         lr: Peak learning rate.
-        weight_decay: AdamW weight decay.
+        weight_decay: Optimizer weight decay.
+        optimizer: `adam`, `adamw`, `rmsprop`, or `sgd_nesterov`.
+        momentum: Momentum for `sgd_nesterov`/`rmsprop`; ignored by
+            `adam`/`adamw`.
         scheduler: `plateau` (ReduceLROnPlateau on `val_mse`),
             `cosine_warmup` (linear warmup then cosine), `onecycle`, or
             `none`.
@@ -72,8 +105,10 @@ class Forecaster(L.LightningModule):
             penalising the whole spectrum equally.
         message_l1_weight: Weight of the message L1 of MPNN/SGN
             (Cranmer et al. use 1e-2; 0 disables).
-        backcast_weight: Weight of `StemGNN.backcast_loss`; StemGNN's
-            backcast head gets no gradient without it.
+        backcast_weight: Weight of the model's `backcast_loss`
+            (`StemGNN`'s backcast head gets no gradient without it;
+            `SpectralTFNet`'s is an auxiliary auto-consistency term,
+            see `SpectralTFNet.backcast_loss`).
         teacher_forcing_ratio: Seq2SeqLatentGNN teacher forcing in
             training.
         uncertainty_weighted: Combine per-output losses with
@@ -125,6 +160,10 @@ class Forecaster(L.LightningModule):
         cascade_anchor_step: Time index into `x` of the last observed
             step (`-1`, or `input_window - 1` when `x` also carries
             the known future inputs, see `data.with_future_exog`).
+        cascade_inflow_known: The future `vazao_entrada` is a known
+            input. When False the cascade uses the inflow of the same
+            hours one day earlier (seasonal naive, past data only)
+            instead of reading the extra `y` column.
     """
 
     def __init__(  # noqa: PLR0913, PLR0917 - every knob is a config field
@@ -133,6 +172,8 @@ class Forecaster(L.LightningModule):
         loss: nn.Module | None = None,
         lr: float = 1e-3,
         weight_decay: float = 1e-4,
+        optimizer: str = "adamw",
+        momentum: float = 0.9,
         scheduler: Scheduler = "plateau",
         warmup_epochs: int = 5,
         max_epochs: int = 200,
@@ -156,6 +197,10 @@ class Forecaster(L.LightningModule):
         cascade_inflow_col: int = 0,
         cascade_outflow_col: int = 0,
         cascade_anchor_step: int = -1,
+        cascade_inflow_known: bool = True,
+        reconstruction: dict[str, torch.Tensor] | None = None,
+        component_loss_weight: float = 1.0,
+        n_aux: int = 0,
     ) -> None:
         super().__init__()
         self.save_hyperparameters(
@@ -165,8 +210,12 @@ class Forecaster(L.LightningModule):
                 "augment",
                 "spectral_freq_weights",
                 "output_weights",
+                "reconstruction",
             ]
         )
+        self.decomposed = reconstruction is not None
+        for name, value in (reconstruction or {}).items():
+            self.register_buffer(f"rec_{name}", value)
         self.model = model
         self.loss_fn = loss if loss is not None else nn.MSELoss()
         self.augment = augment
@@ -224,29 +273,67 @@ class Forecaster(L.LightningModule):
             core, (LinearEdgeNet, SpectralTFNet)
         ):
             aux += hp.message_l1_weight * core.group_l1()
-        if hp.backcast_weight > 0 and isinstance(core, StemGNN):
+        if hp.backcast_weight > 0 and isinstance(
+            core, (StemGNN, SpectralTFNet)
+        ):
             aux += hp.backcast_weight * core.backcast_loss(seen)
         return aux
 
-    def _step(
+    def reconstruct(
+        self, comp_pred: torch.Tensor, x: torch.Tensor
+    ) -> torch.Tensor:
+        """Outputs (scaled like the raw outputs) from their components.
+
+        Each predicted component goes back to raw units through its own
+        affine scaler map, the known components (seasonal base) are
+        read from the input horizon, everything is summed per output in
+        raw units — offsets do not cancel in the scaled space — and the
+        sum is scaled with the output's own map.
+        """
+        raw = (comp_pred - self.rec_pred_b) / self.rec_pred_a
+        out = comp_pred.new_zeros(*comp_pred.shape[:2], len(self.rec_out_a))
+        out = out.index_add(2, self.rec_pred_output, raw)
+        if len(self.rec_known_cols):
+            horizon = comp_pred.shape[1]
+            known = x[:, -horizon:, self.rec_known_cols]
+            known = (known - self.rec_known_b) / self.rec_known_a
+            out = out.index_add(2, self.rec_known_output, known)
+        return out * self.rec_out_a + self.rec_out_b
+
+    def _step(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
         self, batch: tuple[torch.Tensor, torch.Tensor], stage: str
     ) -> torch.Tensor:
         x, y = batch
         training = stage == "train"
+        # `y` carries one extra trailing column (the known future
+        # `vazao_entrada`) when `cascade_weight > 0` — never fed to
+        # the model, nor to augmentations (which index it by target
+        # position), only used below for the cascade loss. With an
+        # output decomposition the predicted components sit between
+        # the outputs and that column.
+        n_targets = self.hparams.n_targets or y.shape[-1]
+        n_comp = len(self.rec_pred_a) if self.decomposed else 0
+        n_aux = self.hparams.n_aux
+        y, y_comp, y_aux, exog = (
+            y[..., :n_targets],
+            y[..., n_targets : n_targets + n_comp],
+            y[..., n_targets + n_comp : n_targets + n_comp + n_aux],
+            y[..., n_targets + n_comp + n_aux :],
+        )
         if training and self.augment is not None:
             x, y = self.augment(x, y)
 
-        # `y` carries one extra trailing column (the known future
-        # `vazao_entrada`) when `cascade_weight > 0` — never fed to
-        # the model, only used below for the cascade loss.
-        n_targets = self.hparams.n_targets or y.shape[-1]
-        y, exog = y[..., :n_targets], y[..., n_targets:]
-
         tf = self.hparams.teacher_forcing_ratio
+        comp_pred = aux_pred = None
         if training and tf > 0 and isinstance(self.core, Seq2SeqLatentGNN):
             pred = self.model(x, target=y, teacher_forcing_ratio=tf)
         else:
             pred = self.model(x)
+            if n_aux:
+                pred, aux_pred = pred[..., :-n_aux], pred[..., -n_aux:]
+            if self.decomposed:
+                comp_pred = pred
+                pred = self.reconstruct(comp_pred, x)
 
         if self.uncertainty is not None:
             per_output = torch.stack(
@@ -273,6 +360,19 @@ class Forecaster(L.LightningModule):
             loss = (per_output * self.output_weights).sum()
         else:
             loss = self.loss_fn(pred, y)
+        if comp_pred is not None:
+            # lambda * loss on the rebuilt outputs (what the metric
+            # sees) + (1 - lambda) * loss on the scaled components
+            # (each band weighted by its own scale, not its variance
+            # share of the sum).
+            lam = self.hparams.component_loss_weight
+            comp_loss = self.loss_fn(comp_pred, y_comp)
+            loss = lam * loss + (1 - lam) * comp_loss
+            self.log(f"{stage}_component_loss", comp_loss, on_epoch=True)
+        if aux_pred is not None:
+            aux_loss = self.loss_fn(aux_pred, y_aux)
+            loss += aux_loss
+            self.log(f"{stage}_aux_loss", aux_loss, on_epoch=True)
         if self.spectral is not None:
             loss += self.hparams.spectral_weight * self.spectral(pred, y)
         if self.hparams.flow_integral_weight > 0:
@@ -284,11 +384,22 @@ class Forecaster(L.LightningModule):
             )
         if self.hparams.cascade_weight > 0:
             hp = self.hparams
+            inflow = exog[..., 0]
+            if aux_pred is not None:
+                # The graph's own forecast of the unknown inflow.
+                inflow = aux_pred[..., 0]
+            elif not hp.cascade_inflow_known:
+                # Same hours of the previous day (seasonal naive): past
+                # data only, ~3x less integrated error than holding the
+                # last value. Needs input_window >= 24 >= horizon.
+                start = hp.cascade_anchor_step + 1 - SEASON
+                horizon = inflow.shape[1]
+                inflow = x[:, start : start + horizon, hp.cascade_inflow_col]
             cascade_nivel = mass_balance_cascade_forecast_torch(
                 level_anchor=x[
                     :, hp.cascade_anchor_step, hp.cascade_level_col
                 ],
-                inflow=exog[..., 0],
+                inflow=inflow,
                 predicted_outflow=pred[..., hp.cascade_vazao_idx],
                 a=hp.cascade_a,
                 b=hp.cascade_b,
@@ -330,8 +441,12 @@ class Forecaster(L.LightningModule):
 
     def configure_optimizers(self) -> dict:
         hp = self.hparams
-        optimizer = torch.optim.AdamW(
-            self.parameters(), lr=hp.lr, weight_decay=hp.weight_decay
+        optimizer = build_optimizer(
+            self.parameters(),
+            name=hp.optimizer,
+            lr=hp.lr,
+            weight_decay=hp.weight_decay,
+            momentum=hp.momentum,
         )
         if hp.scheduler == "none":
             return {"optimizer": optimizer}

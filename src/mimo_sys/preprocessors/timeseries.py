@@ -6,6 +6,7 @@ position-aware inverse transform for evaluating model predictions.
 from __future__ import annotations
 
 import warnings
+from functools import lru_cache
 from typing import Literal, Sequence
 
 import matplotlib.pyplot as plt
@@ -50,6 +51,61 @@ def _ewt_with_boundaries(
     for k in range(bank.shape[1]):
         ewt[:, k] = np.real(np.fft.ifft(np.conjugate(bank[:, k]) * spectrum))
     return ewt[half - 1 : -half, :]
+
+
+@lru_cache(maxsize=64)
+def _unity_bank(boundaries: tuple[float, ...], size: int) -> npt.NDArray:
+    """Meyer bank squared and renormalised to sum 1 on every bin.
+
+    `ewtpy`'s Meyer filters only satisfy sum |phi_k|^2 = 1 away from
+    the band edges (0.5 at some bins on this data), so neither the
+    analysis coefficients nor the plain synthesis add back to the
+    signal. Dividing by the sum makes the bank a partition of unity.
+    """
+    bank = np.abs(EWT_Meyer_FilterBank(np.asarray(boundaries), size)) ** 2
+    return bank / bank.sum(axis=1, keepdims=True)
+
+
+def ewt_causal_components(
+    window: npt.NDArray,
+    boundaries: npt.NDArray,
+    extend: int = 24,
+    period: int = 24,
+) -> npt.NDArray:
+    """EWT bands of a past-only window that add up to it exactly.
+
+    Production-safe variant of the EWT (see
+    `docs/changes/2026-10-22-decomposicao-saidas.md`): fixed
+    `boundaries` fitted on the training rows, a partition-of-unity
+    bank (so `components.sum(1) == window`), and the right edge
+    extended with the last `period` rows repeated (a seasonal-naive
+    guess from the past only) before the mirrored FFT, which cuts the
+    edge error at the last observed row ~3x against plain mirroring.
+
+    Args:
+        window: `(n,)` rows up to and including the last observed one.
+        boundaries: Band boundaries from `EWT1D` on the training rows.
+        extend: Rows of seasonal extension appended on the right.
+        period: Season of the extension (rows).
+
+    Returns:
+        `(n, n_bands)` components of `window`.
+    """
+    n = window.size
+    if extend > 0:
+        last = window[-period:] if n >= period else window[-1:]
+        reps = int(np.ceil(extend / last.size))
+        signal = np.concatenate([window, np.tile(last, reps)[:extend]])
+    else:
+        signal = window
+    half = int(np.ceil(signal.size / 2))
+    mirrored = np.concatenate(
+        [np.flip(signal[: half - 1]), signal, np.flip(signal[-half - 1 : -1])]
+    )
+    spectrum = np.fft.fft(mirrored)
+    bank = _unity_bank(tuple(np.asarray(boundaries)), spectrum.size)
+    comps = np.real(np.fft.ifft(bank * spectrum[:, None], axis=0))
+    return comps[half - 1 : half - 1 + n]
 
 
 class TimeSeriesPreprocessor:

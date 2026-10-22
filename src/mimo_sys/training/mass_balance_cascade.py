@@ -41,7 +41,10 @@ import numpy.typing as npt
 import torch
 
 __all__ = [
+    "apply_level_blend",
+    "fit_level_blend",
     "fit_mass_balance",
+    "fit_mass_balance_simulation",
     "mass_balance_cascade_forecast",
     "mass_balance_cascade_forecast_torch",
 ]
@@ -51,6 +54,7 @@ def fit_mass_balance(
     nivel_res: npt.NDArray,
     vazao_entrada: npt.NDArray,
     vazao_distribuicao: npt.NDArray,
+    exclude: npt.NDArray | None = None,
 ) -> tuple[float, float]:
     """Least-squares fit of `dy2[k] = a * mean(q[k], q[k-1]) + b`.
 
@@ -62,6 +66,9 @@ def fit_mass_balance(
         nivel_res: `(n,)` reservoir level, `y2`.
         vazao_entrada: `(n,)` input flow, `u4`.
         vazao_distribuicao: `(n,)` distribution flow, `y1`.
+        exclude: `(n,)` rows left out of the fit (sensor failures, see
+            `features.bad_sample_mask`); a step is dropped when either
+            of its two rows is.
 
     Returns:
         `(a, b)`.
@@ -69,6 +76,9 @@ def fit_mass_balance(
     q = vazao_entrada - vazao_distribuicao
     dq = (q[1:] + q[:-1]) / 2.0
     dy2 = np.diff(nivel_res)
+    if exclude is not None:
+        keep = ~(exclude[1:] | exclude[:-1])
+        dq, dy2 = dq[keep], dy2[keep]
     design = np.stack([dq, np.ones_like(dq)], axis=1)
     coef, *_ = np.linalg.lstsq(design, dy2, rcond=None)
     return float(coef[0]), float(coef[1])
@@ -81,6 +91,8 @@ def mass_balance_cascade_forecast(
     a: float,
     b: float,
     last_imbalance: npt.NDArray | None = None,
+    leak: float = 0.0,
+    level_ref: float = 0.0,
 ) -> npt.NDArray:
     """Propagate the mass-balance model forward using a predicted outflow.
 
@@ -100,6 +112,11 @@ def mass_balance_cascade_forecast(
             Without it, the first forecast step's trapezoidal average
             falls back to using the first predicted step twice, a
             small approximation at just that one step.
+        leak: `lambda` of the leaky integrator of
+            `docs/1_analise-dados-reservatorio.md` §5: each step also
+            subtracts `lambda * (level - level_ref)` (an uninstrumented,
+            level-dependent outflow). 0 is the plain cascade.
+        level_ref: Level around which the leak acts.
 
     Returns:
         `(n_windows, horizon)` `nivel_res` forecast.
@@ -116,9 +133,73 @@ def mass_balance_cascade_forecast(
     q_prev = np.concatenate([first_q_prev[:, None], q[:, :-1]], axis=1)
     dq = (q + q_prev) / 2.0
     delta = a * dq + b
-    return np.asarray(level_anchor, dtype=float)[:, None] + np.cumsum(
-        delta, axis=1
+    anchor = np.asarray(level_anchor, dtype=float)
+    if leak == 0.0:
+        return anchor[:, None] + np.cumsum(delta, axis=1)
+    out = np.empty_like(delta)
+    level = anchor
+    for k in range(horizon):
+        level = level + delta[:, k] - leak * (level - level_ref)
+        out[:, k] = level
+    return out
+
+
+def fit_mass_balance_simulation(  # noqa: PLR0913, PLR0914
+    nivel_res: npt.NDArray,
+    vazao_entrada: npt.NDArray,
+    vazao_distribuicao: npt.NDArray,
+    horizon: int = 12,
+    exclude: npt.NDArray | None = None,
+    stride: int = 1,
+) -> tuple[float, float, float, float]:
+    """`(a, b, leak, level_ref)` fitted on the 12-step simulation error.
+
+    `fit_mass_balance` minimises the one-step error; the cascade is
+    then run for `horizon` steps, where a small bias in `b` or a missing
+    leak integrates. This fits the three parameters on exactly that use:
+    windows of the training split, the measured inflow and outflow fed
+    in, the simulated level compared with the measured one at every
+    step. Starts from the one-step solution with no leak.
+
+    Args:
+        nivel_res, vazao_entrada, vazao_distribuicao: `(n,)` training rows.
+        horizon: Steps simulated per window.
+        exclude: Rows to keep out (sensor failures); windows touching
+            one are skipped.
+        stride: Distance between window origins.
+    """
+    from scipy.optimize import least_squares  # noqa: PLC0415
+
+    n = len(nivel_res)
+    bad = np.zeros(n, bool) if exclude is None else exclude
+    origins = np.array(
+        [
+            o
+            for o in range(1, n - horizon + 1, stride)
+            if not bad[o - 1 : o + horizon].any()
+        ]
     )
+    steps = origins[:, None] + np.arange(horizon)
+    inflow, outflow = vazao_entrada[steps], vazao_distribuicao[steps]
+    truth = nivel_res[steps]
+    anchor = nivel_res[origins - 1]
+    last = vazao_entrada[origins - 1] - vazao_distribuicao[origins - 1]
+    level_ref = float(np.mean(nivel_res[~bad]))
+    a0, b0 = fit_mass_balance(
+        nivel_res, vazao_entrada, vazao_distribuicao, exclude
+    )
+
+    def residual(p: npt.NDArray) -> npt.NDArray:
+        sim = mass_balance_cascade_forecast(
+            anchor, inflow, outflow, p[0], p[1], last, p[2], level_ref
+        )
+        return (sim - truth).ravel()
+
+    fit = least_squares(
+        residual, x0=[a0, b0, 0.0], bounds=([0, -1, 0], [1, 1, 1])
+    )
+    a, b, leak = (float(v) for v in fit.x)
+    return a, b, leak, level_ref
 
 
 def mass_balance_cascade_forecast_torch(
@@ -158,3 +239,35 @@ def mass_balance_cascade_forecast_torch(
     q_prev = torch.cat([last_imbalance[:, None], q[:, :-1]], dim=1)
     delta = a * (q + q_prev) / 2.0 + b
     return level_anchor[:, None] + torch.cumsum(delta, dim=1)
+
+
+def fit_level_blend(
+    y_true: npt.NDArray, direct: npt.NDArray, cascade: npt.NDArray
+) -> npt.NDArray:
+    """Per-step weight of the cascade against the direct `nivel_res` head.
+
+    `nivel[h] = w[h] * cascade[h] + (1 - w[h]) * direct[h]`, `w` fitted
+    by least squares and clipped to `[0, 1]`. The cascade integrates
+    the predicted outflow, so its error grows with the step while the
+    direct head's does not; the weights follow that (measured: ~1 at
+    the first step, falling to ~0.6 with known inflow and ~0.1
+    without). Fit on the validation forecasts only.
+
+    Args:
+        y_true, direct, cascade: `(n_origins, horizon)`.
+
+    Returns:
+        `(horizon,)` weights.
+    """
+    diff = cascade - direct
+    target = y_true - direct
+    num = (diff * target).sum(axis=0)
+    den = (diff**2).sum(axis=0)
+    return np.clip(num / np.maximum(den, 1e-12), 0.0, 1.0)
+
+
+def apply_level_blend(
+    weights: npt.NDArray, direct: npt.NDArray, cascade: npt.NDArray
+) -> npt.NDArray:
+    """`weights * cascade + (1 - weights) * direct`, per horizon step."""
+    return weights * cascade + (1 - weights) * direct

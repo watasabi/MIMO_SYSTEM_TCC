@@ -499,6 +499,32 @@ def test_spectral_tf_net_residuo_comeca_zerado(window: torch.Tensor) -> None:
     assert model.nonlinearity_share() == 0.0
 
 
+def test_spectral_tf_net_parte_linear_nao_inclui_o_residuo(
+    window: torch.Tensor,
+) -> None:
+    """`_last_linear` é a saída sem o resíduo, mesmo com resíduo ativo.
+
+    Antes, `out += residual` somava o resíduo no próprio tensor da
+    parte linear e inflava o denominador de `nonlinearity_share`.
+    """
+    import copy  # noqa: PLC0415
+
+    torch.manual_seed(SEED)
+    model = build("spectral_tf_net", residual_hidden=8).eval()
+    torch.nn.init.normal_(model.residual[-1].weight)
+    linear_only = copy.deepcopy(model)
+    linear_only.residual = None
+    with torch.no_grad():
+        model(window)
+        linear_only(window)
+    torch.testing.assert_close(model._last_linear, linear_only._last_linear)
+    lin = model._last_linear.pow(2).sum()
+    res = model._last_residual.pow(2).sum()
+    assert model.nonlinearity_share() == pytest.approx(
+        (res / (lin + res)).item()
+    )
+
+
 def test_spectral_tf_net_group_l1_mata_aresta_de_ruido() -> None:
     """Com o lasso por grupo, a aresta de um nó sem informação encolhe."""
     torch.manual_seed(SEED)

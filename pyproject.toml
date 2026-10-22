@@ -38,6 +38,10 @@ tune = [
     "optuna>=5.0.0",
     "optuna-integration[pytorch-lightning]>=5.0.0",
 ]
+bayes = [
+    "arviz>=1.3.0",
+    "pymc>=6.3.2",
+]
 
 [dependency-groups]
 dev = [

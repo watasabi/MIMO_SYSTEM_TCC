@@ -939,3 +939,71 @@ def test_train_spectral_tf_net_com_futuro_e_cascata(mlflow_tmp: None) -> None:
     assert result.y_pred.shape == result.y_true.shape
     assert result.y_pred.shape[1] == N_TARGETS
     assert result.metrics["r2"].notna().all()
+
+
+def test_with_future_exog_so_bombas_zera_vazao_de_entrada() -> None:
+    from mimo_sys.training.data import INPUT_COLS, with_future_exog  # noqa: PLC0415
+
+    pumps = [INPUT_COLS.index(c) for c in ("freq_b1", "freq_b2", "freq_b3")]
+    inflow = INPUT_COLS.index("vazao_entrada")
+    rng = np.random.default_rng(1)
+    future = rng.normal(size=(4, OUTPUT_WINDOW, N_NODES))
+    x = with_future_exog(
+        rng.normal(size=(4, INPUT_WINDOW, N_NODES)), future, pumps
+    )
+    tail = x[:, INPUT_WINDOW:]
+    np.testing.assert_array_equal(tail[..., pumps], future[..., pumps])
+    assert (tail[..., inflow] == 0).all()
+
+
+def test_train_so_bombas_no_futuro_com_cascata(mlflow_tmp: None) -> None:
+    from mimo_sys.training import TrainConfig, train  # noqa: PLC0415
+
+    result = train(
+        TrainConfig(
+            model="spectral_tf_net",
+            model_kwargs={"n_bands": 6, "known_future_idx": (0, 1, 2)},
+            future_exog=True,
+            future_known=("freq_b1", "freq_b2", "freq_b3"),
+            cascade_weight=0.5,
+            max_epochs=2,
+            accelerator="cpu",
+            experiment="test",
+            save=False,
+        )
+    )
+    assert result.metrics["r2"].notna().all()
+    assert result.module.hparams.cascade_inflow_known is False
+
+
+def test_spectral_tf_net_backcast_reconstroi_o_proprio_passado() -> None:
+    from mimo_sys.architectures import SpectralTFNet  # noqa: PLC0415
+
+    input_window, output_window, n_nodes = 20, 4, 3
+    target_idx = [1, 2]
+    model = SpectralTFNet(
+        n_nodes=n_nodes,
+        input_window=input_window,
+        output_window=output_window,
+        target_idx=target_idx,
+        n_bands=4,
+        future_in_input=False,
+        known_future_idx=(0,),
+        pump_idx=(0,),
+    )
+    x = torch.randn(5, input_window, n_nodes)
+
+    with pytest.raises(RuntimeError, match="forward"):
+        model.backcast(x)
+
+    pred = model(x)
+    assert pred.shape == (5, output_window, len(target_idx))
+
+    backcast = model.backcast(x)
+    assert backcast.shape == (5, input_window, len(target_idx))
+
+    loss = model.backcast_loss(x)
+    assert loss.item() >= 0
+    loss.backward()
+    assert model.response.grad is not None
+    assert model.response.grad.abs().sum() > 0

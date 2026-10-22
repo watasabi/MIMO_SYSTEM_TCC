@@ -73,7 +73,13 @@ def test_transform_com_filtro_reproduz_fit_transform(
 def test_round_trip_reconstroi_segmento_novo(
     series: np.ndarray, scaler: str, steps: dict, step_size: int
 ) -> None:
-    """Janela -> inverse_transform(reference=seg) devolve o sinal bruto."""
+    """Janela -> inverse_transform(reference=seg) devolve o sinal bruto.
+
+    Com EWT/detrend isso só fecha porque `reference=seg` inclui o
+    horizonte: a tendência somada de volta é a calculada com os valores
+    futuros, o que não existe em produção (ver
+    `tests/test_causality.py::test_round_trip_com_ewt_so_fecha_lendo_a_tendencia_futura`).
+    """
     train, test = series[:200], series[200:]
     pp = _pp(scaler=scaler, step_size=step_size, **steps)
     pp.fit_transform(train, feats=FEATS)

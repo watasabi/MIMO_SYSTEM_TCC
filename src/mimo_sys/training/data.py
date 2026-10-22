@@ -8,6 +8,7 @@ loads the splits and wraps the windows the preprocessor returns.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -53,25 +54,70 @@ def load_splits(
     }
 
 
-def with_future_exog(past: npt.NDArray, future: npt.NDArray) -> npt.NDArray:
+def with_future_exog(
+    past: npt.NDArray,
+    future: npt.NDArray,
+    known_idx: list[int] | None = None,
+) -> npt.NDArray:
     """Append the known future exogenous inputs to input windows.
 
-    Only `INPUT_IDX` (`freq_b1..3`, `vazao_entrada`) is known ahead of
-    time; every other column of `future` — the outputs, and any derived
-    feature built from them (e.g. the mass-balance integral) — is
-    zeroed, so the horizon never leaks into the input.
+    Only `known_idx` (default `INPUT_IDX`: `freq_b1..3`,
+    `vazao_entrada`) is known ahead of time; every other column of
+    `future` — the outputs, and any derived feature built from them
+    (e.g. the mass-balance integral) — is zeroed, so the horizon never
+    leaks into the input.
 
     Args:
         past: `(n, input_window, n_cols)` input windows.
         future: `(n, output_window, n_cols)` the same rows' horizon,
             all columns, in the same (preprocessed) space.
+        known_idx: Columns whose future values are real inputs.
 
     Returns:
         `(n, input_window + output_window, n_cols)`.
     """
+    idx = INPUT_IDX if known_idx is None else known_idx
     known = np.zeros_like(future)
-    known[..., INPUT_IDX] = future[..., INPUT_IDX]
+    known[..., idx] = future[..., idx]
     return np.concatenate([past, known], axis=1)
+
+
+@dataclass(frozen=True)
+class TargetLayout:
+    """How the model's outputs add up to the `OUTPUT_COLS`.
+
+    Output `i` (original units) is the sum of the predicted columns
+    with `pred_output == i` plus the known-future columns with
+    `known_output == i` (e.g. the seasonal base `y(t-24)`, already
+    observed at the forecast origin). The baseline predicts the raw
+    outputs directly: one predicted column per output, nothing known.
+
+    Attributes:
+        pred_cols: Columns the model predicts, in output order.
+        pred_output: Output index of each predicted column.
+        known_cols: Columns whose horizon values are known at the
+            origin and are added back, not predicted.
+        known_output: Output index of each known column.
+        aux_cols: Columns the model also predicts that are not part of
+            any output (e.g. the unknown future `vazao_entrada` that
+            feeds the mass-balance cascade); returned separately.
+    """
+
+    pred_cols: tuple[int, ...] = tuple(TARGET_IDX)
+    pred_output: tuple[int, ...] = tuple(range(N_TARGETS))
+    known_cols: tuple[int, ...] = ()
+    known_output: tuple[int, ...] = ()
+    aux_cols: tuple[int, ...] = ()
+
+    @property
+    def model_cols(self) -> tuple[int, ...]:
+        """Every column the model outputs, in order."""
+        return self.pred_cols + self.aux_cols
+
+    @property
+    def decomposed(self) -> bool:
+        """The outputs are rebuilt from components, not predicted."""
+        return self.pred_cols != tuple(TARGET_IDX) or bool(self.known_cols)
 
 
 class WindowDataset(Dataset):
