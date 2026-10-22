@@ -1,0 +1,11 @@
+[project]
+name = "mimo-benchmarks"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "lightgbm>=4.7.0",
+    "mlforecast>=1.1.0",
+    "neuralforecast>=3.3.0",
+    "pandas>=2.3.3",
+    "pyarrow>=25.0.1",
+]
