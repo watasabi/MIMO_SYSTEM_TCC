@@ -5,6 +5,7 @@ Uso (da raiz do repo):
     uv run --extra ml python $S grid [batch ...]
     uv run --extra ml python $S ablation <window> <batch>
     uv run --extra ml python $S horizons <window> <batch>
+    uv run --extra ml python $S no_future_inflow [seed ...]
     uv run --extra ml python $S paper
     uv run --extra ml python $S paper_split
 """
@@ -74,7 +75,16 @@ def cascade_level(
     anchors = np.arange(first, len(seg) - h + 1, h)[: len(y_pred) // h]
     return mass_balance_cascade_forecast(
         seg[anchors - 1, nv],
-        np.stack([seg[t : t + h, inflow] for t in anchors]),
+        # Known future inflow, or the same hours of the previous day
+        # (seasonal naive) when `vazao_entrada` is not a known input.
+        np.stack(
+            [
+                seg[t : t + h, inflow]
+                if "vazao_entrada" in cfg.future_known
+                else seg[t - 24 : t - 24 + h, inflow]
+                for t in anchors
+            ]
+        ),
         y_pred[:, VAZAO].reshape(len(anchors), h),
         a,
         b,
@@ -128,6 +138,7 @@ def per_step_all_offsets(
             input_window=cfg.input_window,
             output_window=h,
             future_exog=cfg.future_exog,
+            future_known_idx=[INPUT_COLS.index(c) for c in cfg.future_known],
         )
         y_true = seg[start : start + len(y_pred)][:, TARGET_IDX]
         final = y_pred.copy()
@@ -313,6 +324,29 @@ if __name__ == "__main__":
                     output_window=h,
                     model_kwargs=dict(
                         n_bands=8, n_regimes=1, residual_hidden=residual
+                    ),
+                )
+    elif sys.argv[1] == "no_future_inflow":
+        # Only the pump schedule is known ahead; the inflow is not, and
+        # the cascade uses the inflow of the same hours one day earlier.
+        for seed in [int(a) for a in sys.argv[2:]] or (42, 43, 44):
+            for h, tag, residual in (
+                (12, "lin", 0),
+                (12, "res", 16),
+                (6, "res", 16),
+            ):
+                run(
+                    f"stf_nofutin_h{h}_{tag}_w168_b128_s{seed}",
+                    seed=seed,
+                    input_window=168,
+                    batch_size=128,
+                    output_window=h,
+                    future_known=("freq_b1", "freq_b2", "freq_b3"),
+                    model_kwargs=dict(
+                        n_bands=8,
+                        n_regimes=1,
+                        residual_hidden=residual,
+                        known_future_idx=(0, 1, 2),
                     ),
                 )
     elif sys.argv[1] == "paper":
