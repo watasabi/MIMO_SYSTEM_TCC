@@ -24,8 +24,9 @@ Arquitetura criada em 2026-10-20 para o sistema MIMO do reservatório
    do grafo é um filtro; o filtro *é* a equação. O balanço de massa do
    reservatório aparece nas arestas do nível sem ter sido ensinado.
 3. **O "+ resíduo"** é uma rede neural pequena que corrige o que a parte
-   linear não consegue. Ela responde por ~29% do sinal de saída e é a
-   única parte sem equação fechada (§3).
+   linear não consegue. É a única parte sem equação fechada (§3).
+   **Errata (2026-10-23):** o "~29% do sinal" estava subestimado por um
+   bug de medição. O valor correto é 61–69% da energia; veja o doc 11 §3.
 4. **Contra o artigo (1 passo à frente)**: ganhamos no nível, perdemos um
    pouco em vazão e pressão; no médio, 0,902 contra 0,909–0,921. Em
    12 passos, 0,824 contra 0,333 do ARMAX do artigo.
@@ -116,14 +117,19 @@ Detalhes:
 
 - começa em **zero** (o modelo nasce 100% linear e o resíduo só cresce
   se ajudar);
-- mede-se quanto ele pesa: **~29% da energia da saída** no modelo de
-  12 passos (`nonlinearity_share`) — o resto, 71%, é a parte linear com
-  equação;
+- mede-se quanto ele pesa com o `nonlinearity_share`.
+  **Errata (2026-10-23):** o valor publicado aqui (~29%) estava errado.
+  `out += resíduo` somava o resíduo no próprio tensor da parte linear e
+  inflava o denominador. Medido corretamente, o resíduo carrega **61–69%
+  da energia** do modelo de 12 passos (doc 11 §3). As previsões e os R²
+  deste documento não mudam;
 - ganho: **+0,034** de R² médio em 12 passos (0,790 → 0,824).
 
-Ou seja: a **equação** que extraímos descreve 71% do modelo; o resíduo
-é a parte "caixa-preta" que sobra. Esse número é útil por si só: é uma
-medida de **quanto o sistema é não-linear**.
+Ou seja: a **equação** do modelo com resíduo descreve bem menos do que
+os 71% afirmados antes. A extração da §7 foi feita no modelo **só
+linear** (R² 0,790), que é o modelo interpretável. No modelo com resíduo,
+parte linear e resíduo se ajustam um ao outro, e a parte linear sozinha
+não prevê bem (doc 11 §3).
 
 ---
 

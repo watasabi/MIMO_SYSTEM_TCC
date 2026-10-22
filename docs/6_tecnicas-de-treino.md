@@ -32,6 +32,15 @@ original, ela pertence ao preprocessor.
   o segmento inteiro, incluindo pontos futuros à janela. Isso já valia
   antes desta mudança e afeta as variantes com EWT, não o baseline
   MinMax.
+- **Atenção (2026-10-22):** com detrend, o round trip com `reference=seg`
+  só é exato porque soma a tendência **verdadeira do horizonte**,
+  calculada com os valores futuros. O mesmo vale para o Savgol centrado
+  (`apply_filter`), que usa `t+1` e `t+2`. Em produção a previsão passa
+  por `evaluation.forecast_at_origin`, que recebe só o passado e as
+  entradas futuras conhecidas e **recusa** esses preprocessadores. Os
+  testes estão em `tests/test_causality.py`. Para decompor as saídas,
+  use as decomposições causais de `training/features.py` (à trous,
+  EWT-c, sazonal); veja `docs/9_decomposicao-e-reconstrucao.md`.
 - **Correção:** o `transform` passou a aplicar o filtro **antes** da
   normalização, na mesma ordem do `fit_transform`. Antes a ordem era
   invertida, então val/teste eram processados diferente do treino.

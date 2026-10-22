@@ -15,6 +15,7 @@ O `README.md` na raiz do projeto é a porta de entrada (visão geral, setup, con
 - `6_tecnicas-de-treino.md` — toolkit de treino (augmentations, losses, RevIN, contrastivo, ensemble, tuning)
 - `7_tecnica-cascata-fisica.md` — cascata física entre a previsão de `vazao_distribuicao` e o modelo de `nivel_res`, na busca por R² ≥0,85
 - `8_arquitetura-spectral-tf-net.md` — SpectralTFNet (arestas = funções de transferência no domínio da frequência): desenho, resultados compilados e extração
+- `12_protocolo-avaliacao-artigo.md` — como o artigo avalia o ARMAX (1 passo, y medido, sem free-run) e como comparar com os nossos modelos
 
 Documentação de código fica junto do código: `src/mimo_sys/architectures/README.md` descreve cada arquitetura, seus parâmetros e armadilhas.
 - `uv_subprojects.md` — como usar UV sub-projects para isolar dependências
