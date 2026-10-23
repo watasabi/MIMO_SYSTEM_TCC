@@ -1,4 +1,4 @@
-# Identificação do sistema MIMO do reservatório São José: GOTAS comparado ao ARMAX multiobjetivo de Ferrari, Leandro e Coelho (2025)
+# GOTAS: rede neural em grafo interpretável para identificação de um sistema MIMO de abastecimento de água
 
 Relatório consolidado do trabalho: o problema, o estudo de referência, o
 caminho até a arquitetura final, a construção do modelo bloco a bloco,
