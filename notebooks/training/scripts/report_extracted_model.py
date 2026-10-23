@@ -11,8 +11,10 @@ parte linear e mede, nas janelas de teste:
 - os coeficientes `h_ij(τ)` dos primeiros atrasos, em unidades físicas;
 - o desvio padrão do resíduo não linear, para comparar.
 
-Figuras: o grafo aprendido (espessura = força, cor = sinal) e as
-respostas ao impulso das arestas mais fortes.
+Figuras: o grafo aprendido (espessura = força, cor = sinal), as
+respostas ao impulso das arestas mais fortes e os filtros dessas arestas
+no domínio da frequência, `H_ij(f) = Σ_m Λ_m(f) c_ij,m`, com os 8
+coeficientes complexos `c_ij,m` (módulo e fase) em unidades físicas.
 
 Uso (da raiz do repo):
     uv run --extra ml python \
@@ -132,7 +134,77 @@ def analyse(scenario: str, seed: int) -> dict:
         "resid_std": m._last_residual.numpy().std(axis=(0, 1)) * out_span,
         "lags": lags,
         "ahead": ahead,
+        # Filtro na frequência e coeficientes das bandas, em unidades
+        # físicas (sem o recorte de τ ≤ 0: é o filtro do modelo).
+        "freq_resp": m.frequency_response()[0].detach().numpy()
+        * to_phys[..., None],
+        "bands": torch.view_as_complex(
+            m.response[0].detach().contiguous()
+        ).numpy()
+        * to_phys[..., None],
     }
+
+
+def band_periods(n_fft: int = 2 * (W + H), n_bands: int = 8) -> np.ndarray:
+    """Período (h) do centro de cada banda (`_band_interpolation`)."""
+    n_bins = n_fft // 2 + 1
+    centres = np.concatenate(
+        [[0.0], np.logspace(0, np.log10(n_bins - 1), n_bands - 1)]
+    )
+    centres[-1] = n_bins - 1
+    with np.errstate(divide="ignore"):
+        return n_fft / centres
+
+
+def filter_figure(
+    fr: np.ndarray, fr_sd: np.ndarray, top: list[tuple[int, int]]
+) -> None:
+    """|H_ij(f)| e fase das arestas mais fortes, contra o período."""
+    n_fft = 2 * (W + H)
+    period = n_fft / np.arange(1, fr.shape[-1])
+    centres = band_periods()[1:]
+    fig, axes = plt.subplots(2, 3, figsize=(12, 6.2))
+    for ax, (i, j) in zip(axes.flat, top, strict=False):
+        mag, sd = np.abs(fr[i, j, 1:]), fr_sd[i, j, 1:]
+        ax.fill_between(period, mag - sd, mag + sd, color="tab:red", alpha=0.2)
+        ax.plot(period, mag, color="tab:red", lw=1.4, label="|H|")
+        ax.set_xscale("log")
+        ax.invert_xaxis()
+        for c in centres:
+            ax.axvline(c, color="#cccccc", lw=0.6, ls=":")
+        for c in (24, 12):
+            ax.axvline(c, color="#777777", lw=0.8, ls="--")
+        ph = ax.twinx()
+        ph.plot(
+            period,
+            np.degrees(np.angle(fr[i, j, 1:])),
+            color="#555555",
+            lw=0.8,
+            ls="-.",
+            label="fase",
+        )
+        ph.set_ylim(-190, 190)
+        ph.set_yticks([-180, -90, 0, 90, 180])
+        ph.tick_params(labelsize=7)
+        unit = f"{UNITS[i]} por unid. de {LABEL[SENDERS[j]]}"
+        ax.set_ylabel(unit.replace("\n", " "), fontsize=7)
+        ax.set_title(
+            f"{LABEL[SENDERS[j]]} → {LABEL[OUTPUTS[i]]}".replace("\n", " "),
+            fontsize=10,
+        )
+        ax.set_xlabel("período (h)  ·  tracejado: 24 h e 12 h")
+    fig.suptitle(
+        "Filtros H_ij(f) das arestas mais fortes: módulo (vermelho, faixa = "
+        "desvio entre 5 treinos) e fase (cinza, eixo à direita)",
+        fontsize=11,
+    )
+    fig.tight_layout()
+    fig.savefig(FIG / "stf_filtros_extraidos.png", dpi=140)
+    plt.close(fig)
+    shutil.copy(
+        FIG / "stf_filtros_extraidos.png",
+        OVERLEAF / "stf_filtros_extraidos.png",
+    )
 
 
 def graph_figure(
@@ -293,7 +365,7 @@ def kernel_figure(
     )
 
 
-def main() -> None:
+def main() -> None:  # noqa: PLR0914 - linear on purpose
     summary = {}
     for scenario in ("full", "pumps"):
         runs = [analyse(scenario, s) for s in SEEDS]
@@ -343,6 +415,27 @@ def main() -> None:
             flat = [(i, j) for i in range(3) for j in range(len(SENDERS))]
             top = sorted(flat, key=lambda ij: -share[ij])[:6]
             kernel_figure(lags.mean(0), lags.std(0), ahead, top)
+            fr = np.stack([r["freq_resp"] for r in runs])
+            filter_figure(fr.mean(0), np.abs(fr).std(0), top)
+            bands = np.stack([r["bands"] for r in runs])
+            summary["bandas_periodo_h"] = band_periods().round(1).tolist()
+            summary["filtros_full"] = [
+                {
+                    "aresta": f"{SENDERS[j]} -> {OUTPUTS[i]}",
+                    "modulo": np.abs(bands.mean(0)[i, j]).round(5).tolist(),
+                    "modulo_desvio": np.abs(bands)[:, i, j]
+                    .std(0)
+                    .round(5)
+                    .tolist(),
+                    "fase_graus": np.degrees(np.angle(bands.mean(0)[i, j]))
+                    .round(0)
+                    .tolist(),
+                }
+                for i, j in top
+            ]
+            print("períodos das bandas (h):", summary["bandas_periodo_h"])
+            for f in summary["filtros_full"]:
+                print(f)
         print(f"\n### {scenario}")
         for r in rows:
             if r["parcela"] >= MIN_SHARE or r["emissor"] == "residuo":
