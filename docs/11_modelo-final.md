@@ -1,5 +1,13 @@
 # Modelo final: SpectralTFNet com ensemble de `H` médio e nível combinado
 
+> **Atualização (2026-10-22):** o modelo final do TCC foi enxugado para o
+> SpectralTFNet do doc 8 **com a combinação do nível por passo, sem
+> ensemble e sem busca de hiperparâmetros**. O ensemble rendia +0,003 e o
+> Optuna, +0,000 a +0,003. O modelo enxuto dá 0,833 (`full`) e 0,719
+> (`pumps`) em 12 h e está descrito no doc 13 §5–7
+> (`report_lean_model.py`). Este documento fica como registro da versão
+> com ensemble.
+
 Versão melhorada do modelo do doc 8 para o mesmo sistema MIMO do
 reservatório (4 entradas: bombas `freq_b1..3` e `vazao_entrada`; 3
 saídas: `vazao_distribuicao`, `nivel_res`, `pressao`). Construída em

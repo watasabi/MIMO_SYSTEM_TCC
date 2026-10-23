@@ -1,8 +1,9 @@
 # Identificação do sistema MIMO do reservatório São José: SpectralTFNet comparado ao ARMAX multiobjetivo de Ferrari, Leandro e Coelho (2025)
 
 Relatório consolidado do trabalho: o problema, o estudo de referência, o
-caminho até a arquitetura final, o protocolo experimental, os resultados
-em R² comparados ao artigo e a explicabilidade do modelo. Os detalhes de
+caminho até a arquitetura final, a construção do modelo bloco a bloco,
+o protocolo experimental, os resultados comparados ao artigo em simulação
+livre e o modelo extraído (equação e grafo). Os detalhes de
 cada etapa estão nos documentos numerados desta pasta, citados como
 "doc N". A versão em LaTeX está em `overleaf/main.tex`.
 
@@ -17,31 +18,29 @@ trabalho propõe o **SpectralTFNet**, um modelo de identificação para
 previsão de várias horas à frente que continua explicável em nível de
 equação.
 
-1. **O modelo.** É um grafo cujas arestas são funções de transferência
-   aprendidas no domínio da frequência, simuladas recursivamente como um
-   ARX. Ele usa as entradas cujo futuro é conhecido (programação das
-   bombas) e resolve o nível por uma cascata física de balanço de massa.
-   O modelo final é um ensemble de 5 treinos cuja parte linear é a média
-   das funções de transferência, ou seja, continua sendo uma única
-   equação.
-2. **O desempenho.** Em 12 h o R² médio é **0,836** (0,927 / 0,816 /
-   0,765) com as entradas futuras conhecidas, e 0,721 quando só a
-   programação das bombas é conhecida. A qualidade cai pouco ao longo do
-   horizonte: de 0,89 no passo de 1 h para 0,79 no de 12 h.
-3. **A explicabilidade.** Cada aresta é uma equação de convolução. O
-   balanço de massa do reservatório aparece nas arestas do nível com
-   sinais opostos e intervalo de credibilidade (+0,00345 e −0,00230 m
-   por l/s). O modelo também entrega intervalos de previsão calibrados.
-4. **O contexto.** O trabalho parte da identificação feita por Ferrari,
-   Leandro e Coelho (2025), que ajustaram um ARMAX de ordem 3 com
-   metaheurísticas multiobjetivo e obtiveram R² de até 0,948 / 0,960 /
-   0,863 em previsão de 1 h. No mesmo protocolo de 1 h o SpectralTFNet
-   chega a resultados equivalentes (0,902 contra 0,909 no médio, e 0,976
-   contra 0,954 no nível). A contribuição deste trabalho é estender a
-   identificação para horizontes longos, com explicabilidade. Um modelo
-   caixa-preta forte (LightGBM) fica estatisticamente empatado com o
-   grafo, e experimentos de oráculo indicam que o desempenho restante é
-   limitado pela informação disponível nos dados.
+1. **O modelo.** É uma rede neural em grafo: cada série é um nó, e cada
+   aresta é uma função de transferência aprendida no domínio da
+   frequência. O grafo é simulado recursivamente como um ARX, usa as
+   entradas cujo futuro é conhecido (programação das bombas) e tem o
+   nível corrigido por uma cascata física de balanço de massa, combinada
+   passo a passo com a saída direta. São 3,3 mil parâmetros, um único
+   modelo, sem ensemble e sem busca de hiperparâmetros.
+2. **A comparação com o artigo, em simulação livre.** No nosso teste,
+   o SpectralTFNet chega a **0,862 em 6 h** e **0,833 em 12 h**, contra
+   0,606 e 0,333 do ARMAX. Só com a programação das bombas conhecida,
+   chega a 0,719 em 12 h. Em 1 passo, no protocolo original, os dois são
+   equivalentes.
+3. **A qualidade ao longo do horizonte.** O R² cai de 0,89 no passo de
+   1 h para 0,79 no de 12 h. O ARMAX em simulação livre fica abaixo de
+   zero a partir de 8 h.
+4. **O modelo extraído.** A parte linear é uma equação explícita:
+   - as bombas determinam a vazão e a pressão na própria hora;
+   - o nível responde à vazão de entrada com coeficiente de 0,0029 m por
+     l/s, o mesmo do balanço de massa, que também está explícito na
+     cascata.
+
+   Experimentos de oráculo indicam que o desempenho restante é limitado
+   pela informação disponível nos dados.
 
 ---
 
@@ -92,21 +91,63 @@ válida para uso em produção.
 
 As contribuições são:
 
-- **uma arquitetura nova por combinação**, o SpectralTFNet: um grafo
-  cujas arestas são funções de transferência em bandas de frequência,
-  usado como simulador ARX recursivo, com as entradas futuras conhecidas
-  e uma cascata física diferenciável para o nível;
-- **uma avaliação em três níveis de protocolo**: o de 1 h do estudo de
-  referência, o passo 1 do nosso horizonte e 12 h, com persistência e
-  sazonal ingênuo como referências mínimas;
-- **explicabilidade direta e com incerteza:** a equação é lida das
-  arestas, e o balanço de massa aparece com intervalo de credibilidade
-  (aproximação de Laplace);
+- **uma arquitetura nova por combinação**, o SpectralTFNet: uma rede
+  neural em grafo cujas arestas são funções de transferência em bandas
+  de frequência, usada como simulador ARX recursivo, com as entradas
+  futuras conhecidas e uma cascata física para o nível;
+- **a comparação com o ARMAX de referência em simulação livre** de 6 e
+  12 h, o uso operacional de um modelo de reservatório, com persistência
+  e sazonal ingênuo como referências mínimas;
+- **o modelo extraído:** a equação e o grafo de interações aprendidos,
+  com o balanço de massa recuperado nas arestas;
 - **um contrato de produção testado:** a previsão só recebe o passado e
   as entradas futuras conhecidas, e testes de perturbação e replay
   garantem que nada do futuro vaza;
-- **a medição do teto de informação:** oráculos e um benchmark
-  caixa-preta mostram onde o desempenho é limitado pelos dados.
+- **a medição do teto de informação:** oráculos mostram onde o
+  desempenho é limitado pelos dados.
+
+### 1.4 Redes neurais em grafo para séries temporais
+
+Uma rede neural em grafo (GNN) representa o problema como nós que
+trocam mensagens pelas arestas. Em cada camada, o nó `i` recebe uma
+mensagem de cada vizinho `j`, soma as mensagens e atualiza o próprio
+estado:
+
+```
+m_ji = ψ(h_j, h_i)                  mensagem de j para i
+h_i' = φ(h_i, Σ_{j ∈ N(i)} m_ji)     agregação e atualização
+```
+
+Em séries temporais multivariadas, **cada nó é uma série** e carrega uma
+janela do seu passado, e as arestas representam a dependência entre as
+séries. As GNNs espaço-temporais alternam uma operação no tempo, dentro
+de cada nó, com uma operação no grafo, entre os nós:
+- a **DCRNN** (Li et al., 2018) usa difusão no grafo dentro de uma
+  célula recorrente, num codificador–decodificador (figura abaixo);
+- a **STGCN** (Yu et al., 2018) empilha convoluções no tempo e no grafo;
+- o **StemGNN** (Cao et al., 2020) aplica a transformada de Fourier no
+  tempo e no grafo.
+
+Nessas redes, a mensagem é uma combinação de vetores latentes, sem
+significado físico direto.
+
+![Conceito: GNN, GNN para séries temporais e a aresta do SpectralTFNet](figures/gnn_conceito.png)
+
+![Arquitetura da DCRNN (Li et al., 2018, Figura 2)](figures/dcrnn_li2018.png)
+
+*Fonte da segunda figura: Li, Yu, Shahabi e Liu (2018),
+[arXiv:1707.01926](https://arxiv.org/abs/1707.01926).*
+
+A proposta deste trabalho é uma GNN em que **a mensagem é física**
+(painel c da primeira figura):
+- a mensagem `m_ji` é o sinal do emissor `s_j` filtrado por uma resposta
+  em frequência `H_ij(f)`;
+- a agregação é a soma;
+- a atualização é a própria saída prevista.
+
+Com isso, a aresta *é* uma função de transferência, e o grafo inteiro é
+uma matriz de funções de transferência MIMO. É a mesma classe do ARMAX
+do artigo (§3.1), com a equação legível nos parâmetros.
 
 ---
 
@@ -302,8 +343,7 @@ Três leituras sustentam a abordagem:
 - **Há dependência cruzada condicional**, que um modelo univariado por
   saída descarta. As arestas mais fortes são as da física (§2.3).
 - **O grafo não é completo**: as bombas chegam ao nível só através da
-  vazão. Isso justifica um grafo esparso aprendido com lasso por aresta,
-  e bate com a Laplace (§8.3: 4 de 24 arestas significativas).
+  vazão. Isso justifica um grafo esparso aprendido com lasso por aresta.
 - **Os atrasos variam por aresta** (0 h nas bombas, 1–2 h no balanço,
   ~15 h no nível → pressão). Por isso a aresta é um filtro no tempo,
   `H_ij(f)`, e não um peso escalar.
@@ -313,6 +353,8 @@ arestas que **não** passam. A correlação distribuição → nível sai
 positiva, embora a física diga negativa. A sazonalidade diária que o
 pré-branqueamento não remove é a explicação provável; a direção vem do
 coeficiente do modelo (§8.3).
+
+![O reservatório como grafo: nós com 7 dias reais de cada série; arestas vermelhas com Granger p < 10⁻³](figures/gnn_reservatorio.png)
 
 ---
 
@@ -464,61 +506,205 @@ valessem em produção e a procurar ganhos adicionais:
 - **Decomposição das saídas** em wavelet causal (à trous), EWT corrigido
   e diferença sazonal, prevendo as componentes e somando: nenhuma
   melhora (doc 9).
-- **Combinação do nível e ensemble de `H` médio:** os dois ganhos que
-  entraram no modelo final, de +0,011 no `full` e +0,010 no `pumps`
-  (doc 10).
-- **Não ajudaram:** limpeza do treino, arestas Hammerstein, prever a
-  vazão de entrada no grafo, setpoint de pressão estimado, ARX chaveado,
-  resíduo polinomial e cascata com fuga (docs 10 e 12).
+- **Combinação do nível por passo:** o único ganho que entrou no modelo
+  final, +0,006 no `full` e +0,014 no `pumps` em 12 h (doc 10). No
+  `pumps` ela é necessária: a cascata sozinha leva o nível a R²
+  negativo.
+- **Testados e descartados por não acrescentarem desempenho:**
+  - ensemble de 5 treinos com `H` médio (+0,003);
+  - busca de hiperparâmetros com Optuna (+0,000 no `full`, +0,003 no
+    `pumps`);
+  - limpeza do treino;
+  - arestas Hammerstein;
+  - prever a vazão de entrada no grafo;
+  - setpoint de pressão estimado e ARX chaveado;
+  - resíduo polinomial e cascata com fuga (docs 10 e 12).
 
 ---
 
 ## 5. Arquitetura final
 
-![Arquitetura do modelo final: coluna principal e painéis A–E com a matemática de cada bloco](figures/stf_arquitetura_drawio.png)
+![Arquitetura do modelo final: fluxo de uma previsão (à esquerda) e a matemática de cada bloco (painéis A–F)](figures/stf_arquitetura_drawio.png)
 
-Fonte editável: [stf_arquitetura.drawio](figures/stf_arquitetura.drawio).
+Fonte editável: [stf_arquitetura.drawio](figures/stf_arquitetura.drawio),
+gerada por
+[figure_architecture_drawio.py](../notebooks/training/scripts/figure_architecture_drawio.py).
+A explicação peça por peça, com código executável, está no notebook
+`docs/.explanation_code/arquitetura_spectral_tf_net.ipynb`.
 
-### 5.1 Formulação
+O modelo final é o SpectralTFNet do doc 8 com uma única adição, a
+combinação do nível por passo (§5.6). Os blocos aparecem abaixo na ordem
+em que uma previsão é calculada.
 
-Seja `s_j` a sequência do nó `j`: as últimas `W = 168` horas
-centralizadas pela média do passado e, para as entradas conhecidas, as
-próximas `H = 12` horas. Para cada saída `i` e cada passo do horizonte,
-a previsão linear é:
+### 5.1 Nós e sequência de entrada
 
-```
-ŷ_i(t) = iRFFT( Σ_j H̄_ij(f) · RFFT(s_j) )(t) + b_i
-       = Σ_j Σ_τ h̄_ij(τ) · s_j(t − τ) + b_i
-```
+O grafo tem `N = 8` nós:
+- as quatro entradas `u1..u4`;
+- as três saídas `y1..y3`;
+- um nó derivado com a soma móvel do desbalanço, `Σ(u4 − y1)`. Ele dá ao
+  modelo uma versão já integrada da grandeza que move o nível.
 
-Nessa equação:
-- `h̄_ij = iRFFT(H̄_ij)` é a resposta ao impulso da aresta `j → i`;
-- a FFT usa zero-padding de `2(W+H)`, o que torna a convolução linear e
-  não circular;
-- a cada passo, a previsão é escrita de volta na sequência antes do
-  passo seguinte.
-
-`H̄_ij(f)` é a interpolação linear, em escala logarítmica de frequência,
-de 8 valores complexos por aresta. **`H̄` é a média das funções de
-transferência de 5 treinos com sementes diferentes**, então o modelo
-continua sendo uma única matriz de funções de transferência. A cada
-saída soma-se a média dos 5 resíduos `r_i`, uma MLP pequena sobre o
-passado da própria saída.
-
-O nível final combina a saída direta e a cascata física:
+Para prever a partir da hora `t`, cada nó `j` recebe uma sequência de
+`W + H` amostras, com `W = 168` h de passado e `H = 12` h de horizonte:
 
 ```
-cascata(t+1) = cascata(t) + a · ½(q̂(t+1) + q̂(t)) + b,   q̂ = u4 − ŷ1
-nível(t+h)  = w_h · cascata(t+h) + (1 − w_h) · ŷ2(t+h)
+s_j = [ x_j(t−W+1) … x_j(t) | x_j(t+1) … x_j(t+H) ]
 ```
 
-Os 12 pesos `w_h` são ajustados por mínimos quadrados na validação e
-vão de 0,93 a 0,71 no `full` e de 0,87 a 0,14 no `pumps`. A cascata vale
-quase tudo perto da origem, onde integrou pouco erro, e perde peso com o
-horizonte; perde mais rápido no `pumps`, porque lá a vazão de entrada
-futura é estimada pela do dia anterior.
+- **Entradas conhecidas** (as bombas, e no `full` também a vazão de
+  entrada) trazem no horizonte o valor programado.
+- **Saídas** começam em **zero** no horizonte e são preenchidas pelo
+  próprio modelo (§5.4).
+- **Centralização:** só se subtrai a média do passado,
+  `s̃_j = s_j − μ_j`, sem dividir pelo desvio. Uma bomba desligada a
+  janela inteira tem desvio ≈ 0, e ligá-la no horizonte daria um valor
+  normalizado da ordem de 10⁵.
 
-### 5.2 Cenários de informação futura
+### 5.2 A aresta espectral
+
+Cada aresta `j → i` é um filtro linear invariante no tempo. No tempo, é
+uma convolução com a resposta ao impulso `h_ij`; na frequência, é um
+produto pela resposta em frequência `H_ij(f)`:
+
+```
+ŷ_{i←j}(t) = Σ_τ h_ij(τ) · s̃_j(t − τ)   ⟺   Ŷ_{i←j}(f) = H_ij(f) · S_j(f),   S_j = RFFT(s̃_j)
+```
+
+- **Zero-padding.** A FFT faz convolução *circular*, em que o fim da
+  série contamina o começo. Completando com zeros até
+  `n = 2(W+H) = 360`, a convolução fica linear. São 181 bins de
+  frequência.
+- **Bandas.** Um coeficiente complexo por bin daria 181 por aresta, que
+  sobreajusta com ~1,5 mil amostras de treino. Cada aresta tem então só
+  **8 coeficientes complexos** `c_ij,m`, um por banda, com centros
+  log-espaçados (o primeiro em DC). A resposta em cada bin é interpolada
+  entre os centros vizinhos:
+
+```
+H_ij(f) = Σ_m Λ_m(f) · c_ij,m,     Σ_m Λ_m(f) = 1
+```
+
+  Os `Λ_m` são funções-chapéu fixas; só os `c` são aprendidos (iCSNN). O
+  espaçamento log dá tantos parâmetros às componentes lentas quanto às
+  rápidas.
+- **Tamanho.** A parte linear tem 3 saídas × 8 emissores × 8 bandas × 2
+  reais + 3 vieses = **387 parâmetros**.
+
+### 5.3 Agregação no grafo
+
+Cada saída soma as mensagens de todos os emissores, inclusive dela mesma
+(a auto-aresta `H_ii`):
+
+```
+Ŷ_i(f) = Σ_j H_ij(f) · S_j(f)
+ŷ_i    = iRFFT(Ŷ_i) + b_i  =  Σ_j Σ_τ h_ij(τ) · s̃_j(t − τ) + b_i
+```
+
+Há duas formas de ler essa equação:
+- **como GNN** (§1.4): a mensagem é `h_ij * s̃_j`, a agregação é a soma e
+  a atualização é a identidade;
+- **como identificação de sistemas:** é uma matriz de funções de
+  transferência MIMO. As auto-arestas fazem o papel do polinômio
+  autorregressivo, e as arestas das entradas, da parte exógena. A
+  diferença para o ARMAX é que cada aresta tem 168 h de memória,
+  restrita a 8 bandas, e é estimada por gradiente.
+
+### 5.4 Simulação recursiva
+
+Um filtro invariante aplicado de uma vez não prevê vários passos a
+partir do passado da própria saída: o passo `k` precisaria do lag `k`,
+e o mesmo kernel serve a todas as posições. Testado assim, o R² em 12 h
+foi negativo. Por isso a equação de §5.3 é o modelo de **um passo**,
+iterado como se simula um ARX:
+
+```
+para k = 1..12:
+    S = RFFT(sequência atual)
+    ŷ(t+k) = [iRFFT(Σ_j H_ij S_j)](posição W+k) + b
+    escreve ŷ(t+k) na posição W+k das saídas      ← realimentação
+```
+
+As entradas conhecidas não mudam: entram passo a passo com o valor
+programado. O modelo é, portanto, um **simulador** do sistema ao longo
+do horizonte, e não um preditor direto de 12 valores.
+
+### 5.5 Resíduo não linear
+
+A parte linear não capta, por exemplo, a curva das bombas. Uma MLP
+pequena soma uma correção a cada saída, olhando só o passado centralizado
+da própria saída:
+
+```
+r_i = W2 · tanh(W1 · ỹ_i^passado + β1) + β2,     168 → 16 → 12
+```
+
+- é a mesma rede para as três saídas (2.908 parâmetros);
+- não vê as outras séries nem as entradas futuras, então o acoplamento
+  entre as variáveis fica todo no grafo, onde há equação;
+- a última camada começa em zero, de modo que o modelo nasce linear e o
+  resíduo só cresce se ajudar.
+
+A saída direta de cada variável é `ŷ_i = linear_i + r_i + μ_i`.
+
+### 5.6 Cascata física e combinação do nível
+
+O nível é o único estado do sistema e integra o erro da vazão prevista.
+A cascata calcula um segundo nível a partir do último nível medido,
+pelo balanço de massa com a vazão prevista pelo grafo:
+
+```
+N(t+k) = N(t+k−1) + a · ½(q̂(t+k) + q̂(t+k−1)) + b,     q̂ = u4 − ŷ1
+```
+
+- **Os coeficientes:** `a` = 0,00277 m por l/s e `b`, por mínimos
+  quadrados no treino. O `a` corresponde a uma área de ~1.300 m²
+  (3,6 m³ / `a`), verificável na planta.
+- **No `pumps`:** `u4` futura é substituída pela do dia anterior.
+
+Perto da origem, a cascata integrou pouco erro e é muito precisa; com o
+horizonte, o erro da vazão se acumula. O nível final combina as duas
+estimativas com um peso por passo:
+
+```
+ŷ2(t+h) = w_h · N(t+h) + (1 − w_h) · ŷ2^direto(t+h),     h = 1..12
+```
+
+Os 12 pesos `w_h ∈ [0, 1]` são ajustados por mínimos quadrados na
+validação. Eles vão de 0,93 a 0,70 no `full` e de 0,87 a 0,14 no
+`pumps`, onde a cascata integra também o erro da vazão de entrada
+estimada.
+
+### 5.7 Função de perda e treino
+
+```
+ℒ = Σ_i [ MSE_i / 2σ_i² + log σ_i ]                         pesos por saída aprendidos
+  + λ_c · MSE(nível da cascata)                              física na perda
+  + ρ · [ α Σ |c_ij,m| + (1 − α) Σ_(i,j) ‖c_ij,·‖ ]          sparse-group lasso
+```
+
+- **Pesos por saída** (Kendall, Gal e Cipolla, 2018): `σ_i` é um
+  parâmetro, as saídas ruidosas pesam menos e `log σ_i` impede que
+  `σ_i` cresça sem limite. Trocar por um MSE simples custa 0,020 de R²
+  no `full` e 0,037 no `pumps`, então o termo ficou.
+- **Cascata na perda:** o erro do nível integrado chega por gradiente à
+  vazão prevista.
+- **Lasso por grupo:** zera bandas soltas e arestas inteiras, o que
+  deixa o grafo esparso.
+
+| Item | Valor |
+|---|---|
+| Janela / horizonte | `W` = 168 h / `H` = 12 h |
+| Nós / bandas por aresta | 8 / 8 complexas, log-espaçadas |
+| Resíduo | MLP 168 → 16 → 12, tanh, iniciada em zero |
+| Otimizador | AdamW, taxa 10⁻³, weight decay 10⁻⁴, taxa reduzida no platô da validação |
+| Lote / épocas | 128 / até 150, parada antecipada com paciência 25 |
+| Pesos da perda | `λ_c` = 1, `ρ` = 10⁻³, `α` = 0,5 |
+| Parâmetros | 387 (grafo) + 2.908 (resíduo) + 3 (`σ_i`) + 2 (cascata) + 12 (`w_h`) ≈ 3,3 mil |
+| Custo | ~1,3 MFLOP e ~3 ms em CPU por previsão de 12 h; ~23 KB de pesos |
+
+Os hiperparâmetros são os do doc 8, sem busca.
+
+### 5.8 Cenários de informação futura
 
 | Cenário | Conhecido no horizonte | Para quê |
 |---|---|---|
@@ -529,217 +715,246 @@ Ressalva importante: se as bombas operam em controle automático de
 pressão, a frequência futura reage à demanda, e até o `pumps` usa uma
 informação que a operação não teria (§9.3).
 
-### 5.3 Treino
-
-- **Configuração:** AdamW; batch 128; até 150 épocas com parada
-  antecipada pela validação.
-- **Loss:** MSE por saída com pesos aprendidos (Kendall, Gal e Cipolla,
-  2018), mais a loss da cascata e o lasso por grupo (peso 10⁻³).
-- **Pré-processamento:** MinMax ajustado só no treino.
-- **Parâmetros:** 387 lineares (`H̄` + bias), 5 × 2.908 no resíduo, 2 na
-  cascata e 12 na combinação do nível.
-
 ---
 
 ## 6. Protocolo experimental
 
+O SpectralTFNet e o ARMAX são comparados no nosso teste (linhas
+1.876–2.207), nas mesmas origens:
+
+| Protocolo | O que mede | Origens |
+|---|---|---|
+| **Simulação livre de 6 passos** (principal) | os regressores de saída são as próprias previsões, como no uso operacional | a cada 6 h, sem sobreposição (54 janelas) |
+| **Simulação livre de 12 passos** (principal) | idem | a cada 12 h, sem sobreposição (27 janelas) |
+| **R² por passo** | a qualidade de cada hora do horizonte | todas as horas (321), para o passo `h` não cair sempre no mesmo horário |
+| **1 passo com valores medidos** (verificação) | o protocolo do artigo (série-paralelo); também no recorte dos autores | todas as horas (321) |
+
 | Item | Escolha |
 |---|---|
-| Divisão | cronológica 70/15/15; teste nas linhas 1.876–2.207 |
+| Divisão | cronológica 70/15/15 |
 | Previsão | `forecast_at_origin`, que recebe só o passado e as entradas futuras conhecidas |
-| Origens | a cada 12 h (forecast encadeado, comparável ao doc 8) e em todas as horas (321 origens, mais robusto) |
-| Métricas | R², RMSE, SMAPE por saída; R² médio das três; R² por passo do horizonte |
+| Métricas | R², RMSE, SMAPE por saída; R² médio das três |
 | Referências mínimas | persistência (`ŷ[k+h] = y[k−1]`) e sazonal ingênuo (`ŷ[k+h] = y[k+h−24]`) |
-| Sementes | 3 a 5 por variante |
-| Estatística | bootstrap pareado em blocos de 24 origens (IC 95%) e Diebold–Mariano com variância HAC |
+| Sementes | média de 5 treinos; o desvio entre sementes é de 0,001 a 0,006 no R² médio |
 | Decisão | na validação, com regra fixada antes de rodar; o teste é usado uma vez |
+
+Os números saem de
+[report_lean_model.py](../notebooks/training/scripts/report_lean_model.py)
+(`outputs/lean_model_I0_ref.json`).
 
 ---
 
 ## 7. Resultados
 
-![Comparação de R² com o artigo](figures/tcc_comparacao_r2.png)
+![R² médio em simulação livre: ARMAX × SpectralTFNet](figures/stf_modelo_protocolos.png)
 
-### 7.1 No protocolo do artigo (1 passo, janela de validação 1500–2000)
+### 7.1 Simulação livre de 6 passos
 
-O SpectralTFNet foi retreinado no recorte do artigo (estimação nas
-linhas 550–1150) com o mesmo protocolo: ordem 3, 1 passo e sem `u[k]`.
+Uma nova previsão a cada 6 h, sem sobreposição (R² / RMSE / SMAPE):
 
-| Modelo | R² vazão | R² nível | R² pressão | R² médio |
+| Modelo | vazão (l/s) | nível (m) | pressão (mca) | R² médio |
 |---|---|---|---|---|
-| Persistência | 0,880 | 0,835 | 0,773 | 0,829 |
-| ARMAX MOGWO (Tab. 2) | **0,948** | 0,953 | 0,836 | 0,912 |
-| ARMAX MOCS (Tab. 2) | 0,939 | 0,960 | **0,863** | **0,921** |
-| ARMAX MOGWO (recalculado por nós) | 0,948 | 0,954 | 0,824 | 0,909 |
-| SpectralTFNet linear | 0,926 | **0,976** | 0,805 | 0,902 |
-| SpectralTFNet + resíduo | 0,927 | **0,976** | 0,796 | 0,900 |
+| Persistência | −0,100 / 26,3 / 31,0% | −0,892 / 0,307 / 10,1% | −0,056 / 3,89 / 11,7% | < 0 |
+| Sazonal ingênuo (24 h) | 0,847 / 9,81 / 9,5% | 0,069 / 0,216 / 7,1% | 0,539 / 2,57 / 6,9% | 0,485 |
+| ARMAX MOGWO (simulação livre) | 0,706 / 13,6 / 16,7% | 0,658 / 0,131 / 4,0% | 0,454 / 2,80 / 9,6% | 0,606 |
+| **SpectralTFNet, `full`** | 0,927 / 6,78 / 8,7% | **0,882 / 0,077 / 2,5%** | 0,776 / 1,79 / 5,2% | **0,862** |
+| SpectralTFNet, `pumps` | **0,933 / 6,51 / 8,7%** | 0,609 / 0,140 / 4,4% | **0,783 / 1,76 / 5,2%** | 0,775 |
 
-- **Os dois modelos ficam equivalentes no médio** (0,902 contra 0,909).
-- **No nível**, o SpectralTFNet erra 27% menos (RMSE de 0,036 contra
-  0,049 m). É a saída em que a estrutura do modelo, com uma aresta por
-  par de variáveis, mais ajuda.
-- **Em vazão e pressão** o ARMAX é um pouco melhor. Uma explicação
-  provável é o termo de média móvel, que usa o erro de previsão passado
-  e que o SpectralTFNet não tem.
-- **A persistência** fica como referência mínima. Com a dinâmica lenta
-  do reservatório, ela já explica boa parte da variância em 1 h, e é
-  por isso que os horizontes maiores (§7.3) diferenciam mais os
-  modelos.
+Em 6 h, o SpectralTFNet explica 86% da variância, contra 61% do ARMAX,
+com metade do erro em vazão e pressão.
 
-### 7.2 Um passo à frente no nosso teste
+### 7.2 Simulação livre de 12 passos (o uso operacional)
 
-| Modelo | R² vazão | R² nível | R² pressão | R² médio |
+Uma nova previsão a cada 12 h, sem sobreposição (R² / RMSE / SMAPE):
+
+| Modelo | vazão (l/s) | nível (m) | pressão (mca) | R² médio |
 |---|---|---|---|---|
-| Persistência | 0,854 | 0,824 | 0,592 | 0,757 |
-| ARMAX MOGWO | 0,917 | 0,934 | 0,641 | 0,831 |
-| SpectralTFNet, protocolo do artigo (ordem 3, sem `u[k]`) | 0,901 | 0,973 | 0,678 | 0,850 |
-| **Modelo final, passo 1, `full`** | **0,932** | **0,976** | **0,764** | **0,891** |
-| **Modelo final, passo 1, `pumps`** | **0,937** | 0,945 | 0,762 | **0,881** |
+| Persistência | −0,669 / 32,4 / 38,3% | −0,859 / 0,305 / 10,0% | −1,106 / 5,50 / 18,8% | < 0 |
+| Sazonal ingênuo (24 h) | 0,847 / 9,81 / 9,5% | 0,069 / 0,216 / 7,1% | 0,539 / 2,57 / 6,9% | 0,485 |
+| ARMAX MOGWO (simulação livre) | 0,569 / 16,5 / 19,9% | 0,285 / 0,189 / 5,9% | 0,144 / 3,51 / 12,3% | 0,333 |
+| SpectralTFNet sem a combinação do nível (doc 8) | 0,925 / 6,88 / 8,8% | 0,794 / 0,101 / 3,1% | 0,762 / 1,85 / 5,3% | 0,827 |
+| **SpectralTFNet, `full`** | 0,925 / 6,88 / 8,8% | **0,811 / 0,097 / 3,0%** | 0,762 / 1,85 / 5,3% | **0,833** |
+| SpectralTFNet, `pumps` | **0,927 / 6,77 / 8,9%** | 0,464 / 0,164 / 5,3% | **0,766 / 1,83 / 5,3%** | 0,719 |
 
-O nosso período de teste é mais difícil, porque contém uma mudança de
-fase na operação, e a pressão cai também para o ARMAX (0,64). No passo
-1, o modelo final usa a janela de 168 h e `u[k]`, a entrada conhecida
-daquela hora, que o ARMAX não usa.
+- **A diferença cresce com o horizonte:** 0,833 contra 0,333. O erro do
+  ARMAX em vazão passa de 13,6 para 16,5 l/s, e o R² do nível dele cai de
+  0,66 para 0,29. O SpectralTFNet mantém a vazão em 6,9 l/s e o nível em
+  0,81.
+- **Vazão e pressão quase não dependem do cenário.** O que muda é o
+  nível: sem a vazão de entrada futura, a cascata integra também o erro
+  dessa estimativa, e o R² do nível cai de 0,81 para 0,46.
+- **Com uma origem em cada hora do teste**, o R² médio em 12 h é de
+  0,840 (`full`) e 0,716 (`pumps`).
 
-### 7.3 Doze passos à frente (o uso operacional)
+![Série prevista vs. medida](figures/stf_modelo_serie_full.png)
 
-Origem a cada 12 h, no mesmo teste e com as mesmas janelas para todos.
-
-| Modelo | R² vazão | R² nível | R² pressão | R² médio |
-|---|---|---|---|---|
-| Persistência | −0,669 | −0,859 | −1,106 | < 0 |
-| Sazonal ingênuo (24 h) | 0,847 | 0,069 | 0,539 | 0,485 |
-| ARMAX MOGWO (simulação livre) | 0,569 | 0,285 | 0,144 | 0,333 |
-| Ensemble de 5 redes + cascata (doc 7, não extraível) | 0,931 | 0,783 | 0,744 | 0,819 |
-| SpectralTFNet + resíduo (doc 8, 3 seeds) | 0,924 | 0,787 | 0,761 | 0,824 |
-| **Modelo final, `full`** | **0,927** | **0,816** | **0,765** | **0,836** |
-| **Modelo final, `pumps`** | 0,929 | 0,465 | 0,768 | 0,721 |
-| LightGBM direto + cascata + combinação (caixa-preta, só régua) | 0,934 | 0,824 | 0,792 | 0,850 |
-
-Com todas as origens (321), os números ficam:
-- modelo final: 0,842 no `full` e 0,718 no `pumps`;
-- modelo do doc 8: 0,831 e 0,708;
-- LightGBM: 0,821 e 0,707.
-
-**Em 12 h o modelo final explica 84% da variância.** O ARMAX aparece
-aqui só como referência: é o modelo de 1 passo do estudo original
-rodado em simulação livre, um uso para o qual ele não foi proposto nem
-ajustado.
-
-![Série prevista vs. medida](figures/stf_final_serie_full.png)
-
-### 7.4 Qualidade a cada hora do horizonte
+### 7.3 Qualidade a cada hora do horizonte
 
 R² médio das três saídas no passo `h`, em todas as origens do teste:
 
-| passo | ARMAX (full) | doc 8 (full) | **final (full)** | final (pumps) |
+| passo | persistência | ARMAX (simulação livre) | SpectralTFNet `pumps` | **SpectralTFNet `full`** |
 |---|---|---|---|---|
-| 1 h | 0,83 | 0,889 | **0,892** | 0,883 |
-| 3 h | 0,67 | 0,864 | **0,868** | 0,769 |
-| 6 h | 0,28 | 0,824 | **0,837** | 0,675 |
-| 12 h | < 0 | 0,777 | **0,794** | 0,662 |
+| 1 h | 0,753 | 0,827 | 0,881 | **0,890** |
+| 3 h | 0,051 | 0,666 | 0,768 | **0,867** |
+| 6 h | −1,136 | 0,280 | 0,674 | **0,835** |
+| 9 h | −1,691 | −0,159 | 0,677 | **0,825** |
+| 12 h | −1,791 | −0,657 | 0,661 | **0,791** |
 
-O modelo final perde só 0,10 de R² do passo 1 ao 12. É o efeito da
-simulação recursiva, das entradas futuras conhecidas e da cascata
-física. O ARMAX de 1 passo, rodado em simulação livre, é competitivo no
-primeiro passo, que é o regime para o qual foi ajustado.
+- **O ARMAX** começa perto do SpectralTFNet no primeiro passo, o regime
+  para o qual foi ajustado, e a partir de 8 h prevê pior que a média.
+- **O SpectralTFNet** perde só 0,10 de R² do passo 1 ao 12 no `full`. A
+  distância entre os dois cresce de 0,06 no passo 1 para 1,45 no passo
+  12.
+- **No `pumps`**, a queda se concentra nas primeiras 6 h e depois se
+  estabiliza, quando a combinação já passou quase todo o peso do nível
+  para a saída direta.
 
-![Qualidade por passo](figures/stf_final_por_horizonte.png)
+![Qualidade por passo](figures/stf_modelo_por_horizonte.png)
 
-### 7.5 Significância e benchmark
+### 7.4 Janela de entrada
 
-| Comparação (todas as origens) | full | pumps |
-|---|---|---|
-| Modelo final − doc 8 | +0,011, IC [+0,004, +0,022] | +0,010, IC [−0,022, +0,030] (+0,015 na validação, IC > 0) |
-| Modelo final − LightGBM | +0,021, IC [−0,012, +0,068], DM p = 0,28 | +0,011, IC [−0,023, +0,061], DM p = 0,56 |
+R² médio em 12 passos por janela de entrada (modelo linear, 1 seed, lote
+128; doc 8 §6.4):
 
-O grafo extraível empata estatisticamente com o LightGBM direto
-multivariado. No protocolo de origem a cada 12 h, com só 27 janelas, a
-ordem se inverte (0,836 contra 0,850), também dentro do IC.
+| janela | 24 h | 48 h | 96 h | 168 h | 336 h |
+|---|---|---|---|---|---|
+| R² médio | 0,748 | 0,751 | **0,793** | 0,792 | 0,773 |
 
-### 7.6 Intervalos de previsão
+As janelas de 96 a 168 h são as melhores: deixam o modelo ver o ciclo
+diário e parte do semanal. A de 336 h acrescenta mais parâmetros
+efetivos do que informação.
 
-Conformal por passo e por saída, calibrado na validação (doc 12 §6):
-
-| | Nominal 80%: cobertura no teste | Nominal 90%: cobertura no teste | Largura de 90% do nível |
-|---|---|---|---|
-| full | 0,78–0,84 | 0,88–0,94 | ±0,16 m |
-| pumps | 0,77–0,82 | 0,87–0,91 | ±0,27 m |
-
-### 7.7 O que cada componente vale
+### 7.5 O que cada componente vale
 
 | Componente | Efeito no R² médio, 12 h |
 |---|---|
 | Entradas futuras conhecidas | **+0,147** (o maior ganho isolado) |
-| Resíduo não linear | +0,034 a +0,05 |
-| Cascata física (nível) | de ~0,46 para ~0,79 no nível |
-| Combinação do nível | +0,007 a +0,013 |
-| Ensemble de `H` médio | +0,002 |
+| Resíduo não linear | +0,036 |
+| Pesos por saída na perda (contra MSE simples) | +0,020 (`full`) / +0,037 (`pumps`) |
+| Cascata na perda | +0,009 |
+| Combinação do nível (contra só cascata no `full` ou só direto no `pumps`) | +0,006 / +0,014 |
+| Ensemble de 5 treinos (descartado) | +0,003 |
+| Busca de hiperparâmetros com Optuna (descartada) | +0,000 / +0,003 |
 | Gate de regime, decomposição das saídas, limpeza do treino, Hammerstein, setpoint, fuga, resíduo polinomial | nenhum |
+
+No `pumps`, a combinação do nível é necessária, e não um ajuste fino. Só
+com a cascata, o nível vai a R² −0,14 (o erro da vazão de entrada
+estimada se acumula), e a combinação devolve o nível ao patamar da saída
+direta.
+
+### 7.6 Verificação em 1 passo
+
+Como verificação, o SpectralTFNet também foi retreinado no recorte e no
+protocolo dos autores: ordem 3, 1 passo com valores medidos, sem `u[k]`
+(doc 8 §5.1). O recálculo do ARMAX com os coeficientes publicados
+reproduz a Tabela 2 do artigo.
+
+| R² médio em 1 passo | Janela dos autores (1500–2000) | Nosso teste |
+|---|---|---|
+| Persistência | 0,829 | 0,750 |
+| ARMAX MOGWO | 0,909 | 0,825 |
+| ARMAX MOCS (Tab. 2) | 0,921 | — |
+| SpectralTFNet | 0,902 | 0,889 |
+
+Nesse protocolo, os dois modelos são equivalentes no médio, e o
+SpectralTFNet erra 27% menos no nível. Em 1 passo, porém, a dinâmica
+lenta do reservatório faz até a persistência explicar mais de 75% da
+variância, e o protocolo diferencia pouco os modelos. Por isso a
+comparação principal é a de simulação livre (§7.1–7.3). No nosso teste,
+o valor do SpectralTFNet é o primeiro passo do modelo de 12 h, que usa
+168 h de passado.
 
 ---
 
-## 8. Explicabilidade
+## 8. O modelo extraído
 
-### 8.1 A equação (rota A)
+### 8.1 A equação
 
-Cada aresta é uma resposta ao impulso `h_ij(τ)`, e o modelo é literalmente
-`ŷ_i(t) = Σ_j Σ_τ h_ij(τ) s_j(t − τ) + b_i`, uma matriz de funções de
-transferência MIMO, a mesma família do ARMAX. A diferença é que é
-estimada por gradiente, com 168 h de memória e restrita a bandas.
+O modelo final é uma equação explícita mais um resíduo. Lendo a parte
+linear de cada treino (`h_ij = iRFFT(H_ij)`, convertido para unidades
+físicas) e tomando a média dos 5 treinos, as equações do cenário `full`
+ficam, com os termos principais
+([report_extracted_model.py](../notebooks/training/scripts/report_extracted_model.py),
+`outputs/extracted_model.json`):
 
-O **balanço de massa aparece nas arestas do nível** do modelo linear,
-com intervalo de credibilidade de 95% dado pela aproximação de Laplace
-sobre a simulação de 12 passos (doc 12 §5):
+```
+vazão     ŷ1(t+k) = μ1 + 0,219·ũ1(t+k) − 0,047·ũ1(t+k−2) + 0,194·ũ2(t+k) − 0,058·ũ2(t+k−2)
+                       + 0,018·ũ4(t+k) + … + r1(k)
 
-| Aresta (soma das 3 primeiras horas) | Coeficiente | IC 95% | Física |
-|---|---|---|---|
-| vazão de entrada → nível | +0,00345 m por l/s | [+0,00306, +0,00384] | `+a`, com gray-box `a` = 0,00300 |
-| vazão de distribuição → nível | −0,00230 m por l/s | [−0,00327, −0,00133] | `−a` |
-| nível → nível (1–3 h) | 0,767 | [0,700, 0,834] | integrador |
+pressão   ŷ3(t+k) = μ3 + 0,066·ũ1(t+k) + 0,017·ũ1(t+k−1) + 0,063·ũ2(t+k) + 0,013·ũ2(t+k−1)
+                       − 0,012·ũ2(t+k−2) + … + r3(k)
 
-Os sinais são opostos e os módulos estão na ordem de grandeza da física,
-sem que o modelo tenha recebido a equação do balanço. A MPNN usada antes
-não conseguia expressar essa subtração.
+nível     ŷ2^dir(t+k) = μ2 + 0,0012·ũ4(t+k−1) + 0,0010·ũ4(t+k−2) + 0,0008·ũ4(t+k−3)
+                           − 0,0004·ũ2(t+k−1) − 0,0006·ũ2(t+k−2) − 0,0005·ũ2(t+k−3) + … + r2(k)
 
-### 8.2 O grafo (rota B)
+          ŷ2(t+k) = w_k · N(t+k) + (1 − w_k) · ŷ2^dir(t+k)
+          N(t+k)  = N(t+k−1) + 0,00277 · ½(q̂(t+k) + q̂(t+k−1)) + b,    q̂ = u4 − ŷ1
+```
 
-`|H_ij|` por banda é um grafo de acoplamento **por faixa de
-frequência**:
-- as auto-arestas dominam as bandas intermediárias;
-- a vazão de distribuição é o emissor cruzado mais forte da vazão e da
-  pressão;
-- as bombas pesam nas bandas rápidas;
-- as bandas extremas foram zeradas pelo lasso.
+- **Notação.** `x̃ = x − média dos últimos 7 dias`. As bombas estão em
+  Hz, as vazões em l/s, o nível em m e a pressão em mca.
+- **O que está nas reticências:** os atrasos restantes, até 168 h; os
+  valores programados das entradas nas horas seguintes; e as arestas com
+  menos de 5% de peso.
 
-Pelo ganho estático com Laplace, 4 das 24 arestas são significativas
-(|z| > 3): nível → nível, bomba 2 → pressão, bomba 1 → pressão e
-pressão → pressão.
+A leitura:
+- **Vazão e pressão** são determinadas pelas bombas 1 e 2 *na própria
+  hora*, com ganho positivo (0,19–0,22 l/s e 0,06–0,07 mca por Hz) e uma
+  pequena correção negativa duas horas depois. A bomba 3, quase sempre
+  parada, não tem aresta relevante.
+- **O nível** responde à vazão de entrada com atraso de 1 a 3 h. A soma
+  desses coeficientes, **0,0029 m por l/s**, é o próprio `a` = 0,00277 do
+  balanço de massa.
+- **As bombas entram no nível com sinal negativo:** mais bombeamento,
+  mais saída de água, nível mais baixo. É o outro lado do balanço, que o
+  modelo leu pelas bombas, que determinam a vazão de saída.
+- **A operação aparece nas arestas.** Os coeficientes sobre os valores
+  *programados* da vazão de entrada e das bombas têm sinal oposto ao dos
+  atrasos. Isso é coerente com a operação observada nos dados (§2.4): a
+  adução é reduzida e as bombas são ligadas quando o nível está alto.
 
-### 8.3 A física com incerteza
+### 8.2 O grafo de interações
 
-A cascata gray-box estimada em PyMC, com verossimilhança Student-t sobre
-o treino cru, dá:
-- **área implícita do reservatório:** 1.118 m², IC [1.114, 1.123],
-  verificável contra a planta real;
-- **ν ≈ 1,0:** cauda de Cauchy, ou seja, o modelo encontrou sozinho as
-  falhas de sensor;
-- **intercepto `b` ≈ 0.**
+O peso de cada aresta é o desvio padrão da sua contribuição para a
+saída nas janelas de teste, como fração da variação da saída. Ao lado de
+cada saída aparece o peso do resíduo.
 
-### 8.4 Limite da explicabilidade
+![Grafo de interações do modelo extraído (full)](figures/stf_grafo_extraido_full.png)
 
-No modelo com resíduo, a parte não linear carrega **61–78% da energia**
-da saída (doc 11 §3; o doc 8 dizia 29% por um erro de medição já
-corrigido). A parte linear sozinha desse modelo não prevê bem (R² ~0,48),
-porque linear e resíduo se ajustam um ao outro. Por isso há dois
-modelos com papéis diferentes:
-- **modelo linear** (R² 0,790 em 12 h): é o modelo da equação e do
-  balanço de massa;
-- **modelo final** (0,836): é o modelo de previsão, e a física do nível
-  dele está na cascata explícita.
+| Saída | Arestas (peso; ganho nas 3 primeiras horas) | Resíduo |
+|---|---|---|
+| vazão | bomba 2 (22%; +0,135 l/s por Hz) · bomba 1 (12%; +0,138) · vazão de entrada (10%; +0,030 l/s por l/s) | 56% |
+| nível | vazão de entrada (27%; **+0,0029 m por l/s**) · nível (23%; +0,072) · bomba 2 (16%; −0,0017 m por Hz) · bomba 1 (7%; −0,0016) | 24% |
+| pressão | bomba 2 (31%; +0,060 mca por Hz) · bomba 1 (18%; +0,074) | 46% |
 
-Um resíduo polinomial de Chebyshev, com equação, empata na validação,
-mas perde 0,012–0,015 no teste (doc 12 §3).
+- **Coincidência com a EDA:** as arestas fortes são as que a causalidade
+  de Granger apontou (§2.6).
+- **Estabilidade entre os treinos:** a variação é de 2% a 9%, com uma
+  exceção. A auto-aresta do nível varia 84%, porque o resíduo, que
+  também lê o passado do nível, divide com ela a autorregressão de forma
+  diferente em cada treino.
+- **Cenário `pumps`:** o grafo está em
+  [stf_grafo_extraido_pumps.png](figures/stf_grafo_extraido_pumps.png).
+  As arestas das bombas são as mesmas, e a vazão de entrada perde peso
+  no nível, porque o futuro dela não é conhecido.
+
+![Respostas ao impulso das seis arestas mais fortes (τ < 0: valores programados)](figures/stf_kernels_extraidos.png)
+
+### 8.3 A física explícita e o limite da equação
+
+- **O nível tem uma equação física explícita:** a cascata de §5.6, cujo
+  coeficiente `a` é a própria área do reservatório (~1.300 m²). A
+  combinação por passo diz quanto se confia nessa física a cada hora do
+  horizonte.
+- **O resíduo** pesa 56% na vazão, 24% no nível e 46% na pressão, e é a
+  única parte sem equação fechada. Ele olha só o passado de cada saída,
+  então o acoplamento entre as variáveis está todo nas arestas acima.
+- **Num modelo sem o resíduo** (R² 0,79 em 12 h; doc 8 §7.1), a mesma
+  leitura dá +0,0039 e −0,0019 m por l/s para as arestas da vazão de
+  entrada e da vazão de distribuição no nível. A auto-aresta do nível
+  fica em 0,93, um integrador.
+- **Alternativa com equação:** um resíduo polinomial de Chebyshev empata
+  na validação, mas perde 0,012–0,015 no teste (doc 12 §3).
 
 ---
 
@@ -747,69 +962,59 @@ mas perde 0,012–0,015 no teste (doc 12 §3).
 
 ### 9.1 Como ler a comparação com o estudo de referência
 
-Os dois trabalhos respondem a perguntas diferentes, e a comparação foi
-feita em três níveis justamente por isso:
-
-- **No protocolo de 1 h do estudo de referência,** os dois modelos são
-  equivalentes no médio (0,902 contra 0,909), e o SpectralTFNet vai
-  melhor no nível. O resultado mostra que a arquitetura proposta não
-  perde nada no problema original.
-- **No passo 1 do nosso teste,** o modelo final chega a 0,891 contra
-  0,831, mas usa mais informação: 168 h de janela e as entradas da
-  própria hora.
-- **Em 12 h, a pergunta deste trabalho,** o modelo final chega a 0,836.
-  O ARMAX entra apenas como referência, porque foi proposto para 1 passo.
+- **Simulação livre de 6 e 12 h, a pergunta deste trabalho:** 0,862 e
+  0,833 contra 0,606 e 0,333. A vantagem cresce com o horizonte, porque
+  o SpectralTFNet foi desenhado para simular o sistema (recursão, entradas
+  futuras, cascata). O ARMAX entra como referência, porque foi proposto
+  para 1 passo.
+- **Em 1 passo, o protocolo original:** os dois modelos são
+  equivalentes. A arquitetura proposta não perde nada no problema de
+  partida.
 
 O trabalho de referência resolve bem a identificação de 1 passo com
 otimização multiobjetivo. Este trabalho estende a identificação para
 horizontes longos, com a física explícita no modelo. As duas abordagens
-são complementares: a otimização multiobjetivo, por exemplo, poderia
-ser usada para ajustar o compromisso entre as três saídas no
-SpectralTFNet.
+são complementares: a otimização multiobjetivo poderia, por exemplo, ser
+usada para ajustar o compromisso entre as três saídas no SpectralTFNet.
 
 ### 9.2 O teto de informação
 
 Os oráculos do doc 10 §2 mostram onde está o limite:
 
 - **Pressão:** mesmo com vazão, nível e bombas verdadeiros no mesmo
-  instante, um mapa estático explica 0,78. O modelo está em 0,765. O que
+  instante, um mapa estático explica 0,78. O modelo está em 0,76. O que
   falta é uma variável não medida: pressão a montante, abertura de
   válvula ou o setpoint real.
 - **Nível no `full`:** com a vazão verdadeira, a cascata chega a 0,91. O
-  modelo está em 0,816, e a diferença é o erro integrado da vazão
+  modelo está em 0,81, e a diferença é o erro integrado da vazão
   prevista.
 - **Nível no `pumps`:** é limitado pela vazão de entrada, que nenhum
   modelo previu acima de R² 0,45.
 
-O empate com o LightGBM confirma a leitura: o limite é da informação, e
-não da capacidade do modelo.
-
 ### 9.3 Limitações
 
 - **Apenas 3 meses de dados** e uma única mudança de horário da operação
-  no teste. O protocolo de origem a cada 12 h tem só 27 janelas.
+  no teste. A simulação livre de 12 h tem só 27 janelas.
 - **O cenário `full` assume a vazão de entrada futura conhecida**, e o
   `pumps`, a frequência futura das bombas. Se as bombas estão em
   controle automático de pressão, os dois cenários são otimistas, e a
   informação honesta seria a tabela de setpoints. Isso depende de
   confirmação com a operação (doc 11 §8).
 - **O resíduo não linear não tem equação** no modelo final.
-- **Os intervalos conformal supõem** que validação e teste se comportam
-  da mesma forma. Em produção, a recalibração com uma janela móvel
-  resolve isso.
 
 ### 9.4 A arquitetura é nova?
 
 É uma combinação nova de peças conhecidas, e não um paradigma novo.
-- **As peças:** filtros espectrais aprendidos (FilterNet, FITS), GNN em
-  frequência (FourierGNN), bandas com lasso (iCSNN), exógenas no
-  horizonte (TimeXer) e redes que conservam massa (Mass-Conserving
-  Perceptron).
+- **As peças:** GNNs para séries temporais (DCRNN, StemGNN), filtros
+  espectrais aprendidos (FilterNet, FITS), GNN em frequência
+  (FourierGNN), bandas com lasso (iCSNN), exógenas no horizonte (TimeXer)
+  e redes que conservam massa (Mass-Conserving Perceptron).
 - **O que não encontramos junto na literatura consultada:**
-  - o grafo de funções de transferência em bandas usado como
-    **simulador ARX recursivo**;
+  - uma GNN cuja mensagem é uma função de transferência em bandas,
+    usada como **simulador ARX recursivo**;
   - as entradas futuras no mesmo grafo;
-  - o estado integrador resolvido por **cascata física diferenciável**;
+  - o estado integrador corrigido por uma **cascata física** combinada
+    passo a passo com a saída direta;
   - a medida explícita da não linearidade ao lado da equação.
 
 ---
@@ -819,24 +1024,35 @@ não da capacidade do modelo.
 Partindo da identificação de 1 passo de Ferrari, Leandro e Coelho
 (2025), este trabalho propôs o SpectralTFNet para prever o reservatório
 São José várias horas à frente sem perder a legibilidade física. O
-modelo foi desenhado a partir da física do sistema: o nível é um
-integrador, as entradas futuras são conhecidas e a aresta do grafo é uma
-função de transferência. Ele alcança R² médio de 0,836 em 12 h com as
-entradas futuras conhecidas e 0,721 só com as bombas, e é equivalente ao
-ARMAX de referência no protocolo de 1 h. Além disso, mantém a equação
-legível nas arestas, recupera o balanço de massa com intervalo de
-credibilidade e entrega intervalos de previsão calibrados.
+modelo foi desenhado a partir da física do sistema:
+- cada série é um nó, e cada aresta é uma função de transferência;
+- o grafo é simulado como um ARX, com as entradas futuras conhecidas;
+- o nível, que é um integrador, é corrigido por uma cascata de balanço
+  de massa.
+
+Com 3,3 mil parâmetros e sem busca de hiperparâmetros, ele supera o
+ARMAX de referência em simulação livre: 0,862 em 6 h e 0,833 em 12 h,
+contra 0,606 e 0,333. Em 1 passo, os dois são equivalentes. O modelo
+extraído mostra as bombas determinando a vazão e a pressão na própria
+hora e o nível respondendo à vazão de entrada com o coeficiente do
+balanço de massa.
 
 O desempenho restante é limitado pela informação disponível, não pelo
 modelo. O próximo ganho relevante depende de dados novos da operação: a
 programação da adução, a tabela real de setpoints de pressão e mais
-meses de histórico.
+meses de histórico. Ficam como extensões a quantificação de incerteza
+dos coeficientes e das previsões, explorada no doc 12, e a destilação
+do resíduo em uma expressão fechada.
 
 ---
 
 ## Referências
 
 - Ferrari, J. F.; Leandro, G. V.; Coelho, L. S. *Multi-objective metaheuristics applied for the multivariable system identification*. Int. J. Parallel, Emergent and Distributed Systems, 2025. DOI 10.1080/17445760.2025.2508174.
+- Li, Y.; Yu, R.; Shahabi, C.; Liu, Y. *Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting*. ICLR, 2018. arXiv:1707.01926.
+- Yu, B.; Yin, H.; Zhu, Z. *Spatio-Temporal Graph Convolutional Networks: A Deep Learning Framework for Traffic Forecasting*. IJCAI, 2018.
+- Cao, D. et al. *Spectral Temporal Graph Neural Network for Multivariate Time-series Forecasting (StemGNN)*. NeurIPS, 2020.
+- Gilmer, J. et al. *Neural Message Passing for Quantum Chemistry*. ICML, 2017.
 - Cranmer, M. et al. *Discovering Symbolic Models from Deep Learning with Inductive Biases*. NeurIPS, 2020.
 - Yi, K. et al. *FilterNet: Harnessing Frequency Filters for Time Series Forecasting*. NeurIPS, 2024. arXiv:2411.01623.
 - Xu, Z.; Zeng, A.; Xu, Q. *FITS: Modeling Time Series with 10k Parameters*. ICLR, 2024. arXiv:2307.03756.
@@ -844,5 +1060,4 @@ meses de histórico.
 - Marinucci et al. *iCSNN*, 2026. arXiv:2610.06630.
 - Wang, Y. et al. *TimeXer: Empowering Transformers for Time Series Forecasting with Exogenous Variables*. NeurIPS, 2024. arXiv:2402.19072.
 - Kendall, A.; Gal, Y.; Cipolla, R. *Multi-Task Learning Using Uncertainty to Weigh Losses*. CVPR, 2018.
-- Diebold, F. X.; Mariano, R. S. *Comparing Predictive Accuracy*. J. Business & Economic Statistics, 1995.
 - Ljung, L. *System Identification: Theory for the User*. Prentice Hall, 1999.
