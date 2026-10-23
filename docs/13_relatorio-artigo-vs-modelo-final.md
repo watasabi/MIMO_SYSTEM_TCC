@@ -1,4 +1,4 @@
-# Identificação do sistema MIMO do reservatório São José: SpectralTFNet comparado ao ARMAX multiobjetivo de Ferrari, Leandro e Coelho (2025)
+# Identificação do sistema MIMO do reservatório São José: GOTAS comparado ao ARMAX multiobjetivo de Ferrari, Leandro e Coelho (2025)
 
 Relatório consolidado do trabalho: o problema, o estudo de referência, o
 caminho até a arquitetura final, a construção do modelo bloco a bloco,
@@ -14,7 +14,8 @@ cada etapa estão nos documentos numerados desta pasta, citados como
 O reservatório São José (Sanepar, Curitiba/PR) é um sistema MIMO com
 quatro entradas (frequência de três bombas e vazão de entrada) e três
 saídas (vazão de distribuição, nível do reservatório e pressão). Este
-trabalho propõe o **SpectralTFNet**, um modelo de identificação para
+trabalho propõe o **GOTAS** (*Graph Operator for Transfer-function ARX
+in the Spectral domain*), um modelo de identificação para
 previsão de várias horas à frente que continua explicável em nível de
 equação.
 
@@ -26,7 +27,7 @@ equação.
    passo a passo com a saída direta. São 3,3 mil parâmetros, um único
    modelo, sem ensemble e sem busca de hiperparâmetros.
 2. **A comparação com o artigo, em simulação livre.** No nosso teste,
-   o SpectralTFNet chega a **0,862 em 6 h** e **0,833 em 12 h**, contra
+   o GOTAS chega a **0,862 em 6 h** e **0,833 em 12 h**, contra
    0,606 e 0,333 do ARMAX. Só com a programação das bombas conhecida,
    chega a 0,719 em 12 h. Em 1 passo, no protocolo original, os dois são
    equivalentes.
@@ -91,7 +92,7 @@ válida para uso em produção.
 
 As contribuições são:
 
-- **uma arquitetura nova por combinação**, o SpectralTFNet: uma rede
+- **uma arquitetura nova por combinação**, o GOTAS: uma rede
   neural em grafo cujas arestas são funções de transferência em bandas
   de frequência, usada como simulador ARX recursivo, com as entradas
   futuras conhecidas e uma cascata física para o nível;
@@ -131,7 +132,7 @@ de cada nó, com uma operação no grafo, entre os nós:
 Nessas redes, a mensagem é uma combinação de vetores latentes, sem
 significado físico direto.
 
-![Conceito: GNN, GNN para séries temporais e a aresta do SpectralTFNet](figures/gnn_conceito.png)
+![Conceito: GNN, GNN para séries temporais e a aresta do GOTAS](figures/gnn_conceito.png)
 
 ![Arquitetura da DCRNN (Li et al., 2018, Figura 2)](figures/dcrnn_li2018.png)
 
@@ -385,7 +386,7 @@ espaço [−1, 1].
 - **Modelo reportado:** a solução de compromisso da frente de Pareto
   mais próxima de R² = 1 nas três saídas.
 
-Para comparar os dois trabalhos no mesmo terreno, o SpectralTFNet também
+Para comparar os dois trabalhos no mesmo terreno, o GOTAS também
 foi treinado e avaliado exatamente nesse protocolo (§7.1).
 
 ### 3.3 Os números publicados
@@ -455,9 +456,9 @@ próximas 12 h. Sem elas, a rede precisava adivinhar o que as bombas
 fariam, e esse chute virava exatamente o viés de baixa frequência que a
 cascata integrava.
 
-### 4.4 O desenho do SpectralTFNet
+### 4.4 O desenho do GOTAS
 
-O SpectralTFNet foi desenhado para resolver os dois problemas ao mesmo
+O GOTAS foi desenhado para resolver os dois problemas ao mesmo
 tempo, em cinco decisões:
 
 1. **A aresta é uma função de transferência** `H_ij(f)`, aplicada no
@@ -524,6 +525,10 @@ valessem em produção e a procurar ganhos adicionais:
 
 ## 5. Arquitetura final
 
+> No código, o modelo é a classe `SpectralTFNet`
+> (`src/mimo_sys/architectures/spectral_tf_net.py`); o nome GOTAS é o usado
+> no artigo.
+
 ![Arquitetura do modelo final: fluxo de uma previsão (à esquerda) e a matemática de cada bloco (painéis A–F)](figures/stf_arquitetura_drawio.png)
 
 Fonte editável: [stf_arquitetura.drawio](figures/stf_arquitetura.drawio),
@@ -532,7 +537,7 @@ gerada por
 A explicação peça por peça, com código executável, está no notebook
 `docs/.explanation_code/arquitetura_spectral_tf_net.ipynb`.
 
-O modelo final é o SpectralTFNet do doc 8 com uma única adição, a
+O modelo final é o GOTAS do doc 8 com uma única adição, a
 combinação do nível por passo (§5.6). Os blocos aparecem abaixo na ordem
 em que uma previsão é calculada.
 
@@ -719,7 +724,7 @@ informação que a operação não teria (§9.3).
 
 ## 6. Protocolo experimental
 
-O SpectralTFNet e o ARMAX são comparados no nosso teste (linhas
+O GOTAS e o ARMAX são comparados no nosso teste (linhas
 1.876–2.207), nas mesmas origens:
 
 | Protocolo | O que mede | Origens |
@@ -746,7 +751,7 @@ Os números saem de
 
 ## 7. Resultados
 
-![R² médio em simulação livre: ARMAX × SpectralTFNet](figures/stf_modelo_protocolos.png)
+![R² médio em simulação livre: ARMAX × GOTAS](figures/stf_modelo_protocolos.png)
 
 ### 7.1 Simulação livre de 6 passos
 
@@ -757,10 +762,10 @@ Uma nova previsão a cada 6 h, sem sobreposição (R² / RMSE / SMAPE):
 | Persistência | −0,100 / 26,3 / 31,0% | −0,892 / 0,307 / 10,1% | −0,056 / 3,89 / 11,7% | < 0 |
 | Sazonal ingênuo (24 h) | 0,847 / 9,81 / 9,5% | 0,069 / 0,216 / 7,1% | 0,539 / 2,57 / 6,9% | 0,485 |
 | ARMAX MOGWO (simulação livre) | 0,706 / 13,6 / 16,7% | 0,658 / 0,131 / 4,0% | 0,454 / 2,80 / 9,6% | 0,606 |
-| **SpectralTFNet, `full`** | 0,927 / 6,78 / 8,7% | **0,882 / 0,077 / 2,5%** | 0,776 / 1,79 / 5,2% | **0,862** |
-| SpectralTFNet, `pumps` | **0,933 / 6,51 / 8,7%** | 0,609 / 0,140 / 4,4% | **0,783 / 1,76 / 5,2%** | 0,775 |
+| **GOTAS, `full`** | 0,927 / 6,78 / 8,7% | **0,882 / 0,077 / 2,5%** | 0,776 / 1,79 / 5,2% | **0,862** |
+| GOTAS, `pumps` | **0,933 / 6,51 / 8,7%** | 0,609 / 0,140 / 4,4% | **0,783 / 1,76 / 5,2%** | 0,775 |
 
-Em 6 h, o SpectralTFNet explica 86% da variância, contra 61% do ARMAX,
+Em 6 h, o GOTAS explica 86% da variância, contra 61% do ARMAX,
 com metade do erro em vazão e pressão.
 
 ### 7.2 Simulação livre de 12 passos (o uso operacional)
@@ -772,13 +777,13 @@ Uma nova previsão a cada 12 h, sem sobreposição (R² / RMSE / SMAPE):
 | Persistência | −0,669 / 32,4 / 38,3% | −0,859 / 0,305 / 10,0% | −1,106 / 5,50 / 18,8% | < 0 |
 | Sazonal ingênuo (24 h) | 0,847 / 9,81 / 9,5% | 0,069 / 0,216 / 7,1% | 0,539 / 2,57 / 6,9% | 0,485 |
 | ARMAX MOGWO (simulação livre) | 0,569 / 16,5 / 19,9% | 0,285 / 0,189 / 5,9% | 0,144 / 3,51 / 12,3% | 0,333 |
-| SpectralTFNet sem a combinação do nível (doc 8) | 0,925 / 6,88 / 8,8% | 0,794 / 0,101 / 3,1% | 0,762 / 1,85 / 5,3% | 0,827 |
-| **SpectralTFNet, `full`** | 0,925 / 6,88 / 8,8% | **0,811 / 0,097 / 3,0%** | 0,762 / 1,85 / 5,3% | **0,833** |
-| SpectralTFNet, `pumps` | **0,927 / 6,77 / 8,9%** | 0,464 / 0,164 / 5,3% | **0,766 / 1,83 / 5,3%** | 0,719 |
+| GOTAS sem a combinação do nível (doc 8) | 0,925 / 6,88 / 8,8% | 0,794 / 0,101 / 3,1% | 0,762 / 1,85 / 5,3% | 0,827 |
+| **GOTAS, `full`** | 0,925 / 6,88 / 8,8% | **0,811 / 0,097 / 3,0%** | 0,762 / 1,85 / 5,3% | **0,833** |
+| GOTAS, `pumps` | **0,927 / 6,77 / 8,9%** | 0,464 / 0,164 / 5,3% | **0,766 / 1,83 / 5,3%** | 0,719 |
 
 - **A diferença cresce com o horizonte:** 0,833 contra 0,333. O erro do
   ARMAX em vazão passa de 13,6 para 16,5 l/s, e o R² do nível dele cai de
-  0,66 para 0,29. O SpectralTFNet mantém a vazão em 6,9 l/s e o nível em
+  0,66 para 0,29. O GOTAS mantém a vazão em 6,9 l/s e o nível em
   0,81.
 - **Vazão e pressão quase não dependem do cenário.** O que muda é o
   nível: sem a vazão de entrada futura, a cascata integra também o erro
@@ -792,7 +797,7 @@ Uma nova previsão a cada 12 h, sem sobreposição (R² / RMSE / SMAPE):
 
 R² médio das três saídas no passo `h`, em todas as origens do teste:
 
-| passo | persistência | ARMAX (simulação livre) | SpectralTFNet `pumps` | **SpectralTFNet `full`** |
+| passo | persistência | ARMAX (simulação livre) | GOTAS `pumps` | **GOTAS `full`** |
 |---|---|---|---|---|
 | 1 h | 0,753 | 0,827 | 0,881 | **0,890** |
 | 3 h | 0,051 | 0,666 | 0,768 | **0,867** |
@@ -800,9 +805,9 @@ R² médio das três saídas no passo `h`, em todas as origens do teste:
 | 9 h | −1,691 | −0,159 | 0,677 | **0,825** |
 | 12 h | −1,791 | −0,657 | 0,661 | **0,791** |
 
-- **O ARMAX** começa perto do SpectralTFNet no primeiro passo, o regime
+- **O ARMAX** começa perto do GOTAS no primeiro passo, o regime
   para o qual foi ajustado, e a partir de 8 h prevê pior que a média.
-- **O SpectralTFNet** perde só 0,10 de R² do passo 1 ao 12 no `full`. A
+- **O GOTAS** perde só 0,10 de R² do passo 1 ao 12 no `full`. A
   distância entre os dois cresce de 0,06 no passo 1 para 1,45 no passo
   12.
 - **No `pumps`**, a queda se concentra nas primeiras 6 h e depois se
@@ -844,7 +849,7 @@ direta.
 
 ### 7.6 Verificação em 1 passo
 
-Como verificação, o SpectralTFNet também foi retreinado no recorte e no
+Como verificação, o GOTAS também foi retreinado no recorte e no
 protocolo dos autores: ordem 3, 1 passo com valores medidos, sem `u[k]`
 (doc 8 §5.1). O recálculo do ARMAX com os coeficientes publicados
 reproduz a Tabela 2 do artigo.
@@ -854,14 +859,14 @@ reproduz a Tabela 2 do artigo.
 | Persistência | 0,829 | 0,750 |
 | ARMAX MOGWO | 0,909 | 0,825 |
 | ARMAX MOCS (Tab. 2) | 0,921 | — |
-| SpectralTFNet | 0,902 | 0,889 |
+| GOTAS | 0,902 | 0,889 |
 
 Nesse protocolo, os dois modelos são equivalentes no médio, e o
-SpectralTFNet erra 27% menos no nível. Em 1 passo, porém, a dinâmica
+GOTAS erra 27% menos no nível. Em 1 passo, porém, a dinâmica
 lenta do reservatório faz até a persistência explicar mais de 75% da
 variância, e o protocolo diferencia pouco os modelos. Por isso a
 comparação principal é a de simulação livre (§7.1–7.3). No nosso teste,
-o valor do SpectralTFNet é o primeiro passo do modelo de 12 h, que usa
+o valor do GOTAS é o primeiro passo do modelo de 12 h, que usa
 168 h de passado.
 
 ---
@@ -964,7 +969,7 @@ cada saída aparece o peso do resíduo.
 
 - **Simulação livre de 6 e 12 h, a pergunta deste trabalho:** 0,862 e
   0,833 contra 0,606 e 0,333. A vantagem cresce com o horizonte, porque
-  o SpectralTFNet foi desenhado para simular o sistema (recursão, entradas
+  o GOTAS foi desenhado para simular o sistema (recursão, entradas
   futuras, cascata). O ARMAX entra como referência, porque foi proposto
   para 1 passo.
 - **Em 1 passo, o protocolo original:** os dois modelos são
@@ -975,7 +980,7 @@ O trabalho de referência resolve bem a identificação de 1 passo com
 otimização multiobjetivo. Este trabalho estende a identificação para
 horizontes longos, com a física explícita no modelo. As duas abordagens
 são complementares: a otimização multiobjetivo poderia, por exemplo, ser
-usada para ajustar o compromisso entre as três saídas no SpectralTFNet.
+usada para ajustar o compromisso entre as três saídas no GOTAS.
 
 ### 9.2 O teto de informação
 
@@ -1022,7 +1027,7 @@ Os oráculos do doc 10 §2 mostram onde está o limite:
 ## 10. Conclusão
 
 Partindo da identificação de 1 passo de Ferrari, Leandro e Coelho
-(2025), este trabalho propôs o SpectralTFNet para prever o reservatório
+(2025), este trabalho propôs o GOTAS para prever o reservatório
 São José várias horas à frente sem perder a legibilidade física. O
 modelo foi desenhado a partir da física do sistema:
 - cada série é um nó, e cada aresta é uma função de transferência;
@@ -1048,7 +1053,7 @@ do resíduo em uma expressão fechada.
 
 ## Referências
 
-- Ferrari, J. F.; Leandro, G. V.; Coelho, L. S. *Multi-objective metaheuristics applied for the multivariable system identification*. Int. J. Parallel, Emergent and Distributed Systems, 2025. DOI 10.1080/17445760.2025.2508174.
+- Ferrari, A. C. K.; Leandro, G. V.; Coelho, L. dos S. *Multi-objective metaheuristics applied for the multivariable system identification*. Int. J. Parallel, Emergent and Distributed Systems, 2025. DOI 10.1080/17445760.2025.2508174.
 - Li, Y.; Yu, R.; Shahabi, C.; Liu, Y. *Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting*. ICLR, 2018. arXiv:1707.01926.
 - Yu, B.; Yin, H.; Zhu, Z. *Spatio-Temporal Graph Convolutional Networks: A Deep Learning Framework for Traffic Forecasting*. IJCAI, 2018.
 - Cao, D. et al. *Spectral Temporal Graph Neural Network for Multivariate Time-series Forecasting (StemGNN)*. NeurIPS, 2020.
@@ -1057,7 +1062,7 @@ do resíduo em uma expressão fechada.
 - Yi, K. et al. *FilterNet: Harnessing Frequency Filters for Time Series Forecasting*. NeurIPS, 2024. arXiv:2411.01623.
 - Xu, Z.; Zeng, A.; Xu, Q. *FITS: Modeling Time Series with 10k Parameters*. ICLR, 2024. arXiv:2307.03756.
 - Yi, K. et al. *FourierGNN: Rethinking Multivariate Time Series Forecasting from a Pure Graph Perspective*. NeurIPS, 2023. arXiv:2311.06190.
-- Marinucci et al. *iCSNN*, 2026. arXiv:2610.06630.
+- Marinucci, L.; Di Nino, L.; D'Acunto, G.; Di Lorenzo, P.; Barbarossa, S. *Inverse Cross-spectral Neural Networks for Multivariate Time Series* (iCSNN), 2026. arXiv:2610.06630.
 - Wang, Y. et al. *TimeXer: Empowering Transformers for Time Series Forecasting with Exogenous Variables*. NeurIPS, 2024. arXiv:2402.19072.
 - Kendall, A.; Gal, Y.; Cipolla, R. *Multi-Task Learning Using Uncertainty to Weigh Losses*. CVPR, 2018.
 - Ljung, L. *System Identification: Theory for the User*. Prentice Hall, 1999.

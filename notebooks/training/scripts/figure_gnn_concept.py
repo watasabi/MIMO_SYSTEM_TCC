@@ -2,7 +2,7 @@
 
 1. `gnn_conceito`: (a) passagem de mensagens num grafo; (b) GNN
    espaço-temporal, cada nó carrega uma janela de série; (c) a aresta do
-   SpectralTFNet, em que a mensagem é um filtro `H_ij(f)`.
+   GOTAS, em que a mensagem é um filtro `H_ij(f)`.
 2. `gnn_reservatorio`: as 7 séries do treino como nós (trecho real de
    7 dias) e as arestas para as saídas, com espessura pela causalidade
    de Granger (`report_graph_dependency.py`).
@@ -159,7 +159,7 @@ def concept() -> None:  # noqa: PLR0914, PLR0915 - one figure, linear
         "(b) GNN para séries temporais\n(STGNN, DCRNN, StemGNN)", fontsize=11
     )
 
-    # (c) a aresta do SpectralTFNet
+    # (c) a aresta do GOTAS
     ax = axes[2]
     pj, pi = (1.6, 6.5), (8.4, 6.5)
     for (x, y), lab, fc in ((pj, "$s_j$", IN_C), (pi, r"$\hat y_i$", OUT_C)):
@@ -210,7 +210,7 @@ def concept() -> None:  # noqa: PLR0914, PLR0915 - one figure, linear
         fontsize=12,
     )
     ax.set_title(
-        "(c) SpectralTFNet: a mensagem é uma\nfunção de transferência",
+        "(c) GOTAS: a mensagem é uma\nfunção de transferência",
         fontsize=11,
     )
 
@@ -290,7 +290,7 @@ def reservoir() -> None:  # noqa: PLR0914 - one figure, linear
     )
     ax.set_title(
         "O reservatório como grafo: cada aresta j → i vira uma "
-        "função de transferência $H_{ij}(f)$ no SpectralTFNet",
+        "função de transferência $H_{ij}(f)$ no GOTAS",
         fontsize=12,
     )
     fig.savefig(FIG / "gnn_reservatorio.png", dpi=150, bbox_inches="tight")

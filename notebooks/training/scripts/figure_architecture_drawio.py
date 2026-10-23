@@ -153,7 +153,7 @@ text(
     10,
     1640,
     40,
-    "<b>SpectralTFNet</b>: grafo de funções de transferência simulado "
+    "<b>GOTAS</b>: grafo de funções de transferência simulado "
     "como ARX, com resíduo não linear e nível pela física",
     size=18,
 )
