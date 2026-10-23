@@ -65,6 +65,8 @@ FULL_TOLERANCE = -0.005
 
 VARIANTS: dict[str, dict] = {
     "I0_ref": {},
+    # Doc 8's model with a plain MSE instead of Kendall's learned weights.
+    "I0_mse": {"uncertainty_weighted": False},
     "I1_clean": {"clean_train": True},
     "I4_clean_inflow": {"clean_train": True, "predict_inflow": True},
     # Step 5: explicit pump-curve polynomials (Hammerstein) instead of,
