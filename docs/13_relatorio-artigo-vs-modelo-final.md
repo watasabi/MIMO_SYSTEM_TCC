@@ -121,10 +121,13 @@ h_i' = φ(h_i, Σ_{j ∈ N(i)} m_ji)     agregação e atualização
 
 Em séries temporais multivariadas, **cada nó é uma série** e carrega uma
 janela do seu passado, e as arestas representam a dependência entre as
-séries. As GNNs espaço-temporais alternam uma operação no tempo, dentro
-de cada nó, com uma operação no grafo, entre os nós:
+séries. As GNNs espaço-temporais tratam as séries como uma sequência de
+grafos, um por instante, com a mesma estrutura e valores diferentes nos
+nós, e alternam uma operação no grafo, entre os nós, com uma operação no
+tempo, dentro de cada nó, até produzir os grafos do horizonte (segunda
+figura abaixo):
 - a **DCRNN** (Li et al., 2018) usa difusão no grafo dentro de uma
-  célula recorrente, num codificador–decodificador (figura abaixo);
+  célula recorrente, num codificador–decodificador;
 - a **STGCN** (Yu et al., 2018) empilha convoluções no tempo e no grafo;
 - o **StemGNN** (Cao et al., 2020) aplica a transformada de Fourier no
   tempo e no grafo.
@@ -134,10 +137,11 @@ significado físico direto.
 
 ![Conceito: GNN, GNN para séries temporais e a aresta do GOTAS](figures/gnn_conceito.png)
 
-![Arquitetura da DCRNN (Li et al., 2018, Figura 2)](figures/dcrnn_li2018.png)
+![Esquema genérico de uma GNN espaço-temporal](figures/stgnn_generica.png)
 
-*Fonte da segunda figura: Li, Yu, Shahabi e Liu (2018),
-[arXiv:1707.01926](https://arxiv.org/abs/1707.01926).*
+*Segunda figura: elaborada com base em Li, Yu, Shahabi e Liu (2018),
+[arXiv:1707.01926](https://arxiv.org/abs/1707.01926); séries sintéticas,
+não as do reservatório.*
 
 A proposta deste trabalho é uma GNN em que **a mensagem é física**
 (painel c da primeira figura):
@@ -149,6 +153,11 @@ A proposta deste trabalho é uma GNN em que **a mensagem é física**
 Com isso, a aresta *é* uma função de transferência, e o grafo inteiro é
 uma matriz de funções de transferência MIMO. É a mesma classe do ARMAX
 do artigo (§3.1), com a equação legível nos parâmetros.
+
+Diferentemente do esquema genérico, o GOTAS não monta um grafo por
+instante: cada nó carrega a sequência inteira, com o passado e as
+entradas futuras conhecidas, e a aresta filtra essa sequência, de modo
+que grafo e tempo são uma única operação.
 
 ---
 
@@ -792,6 +801,60 @@ Uma nova previsão a cada 12 h, sem sobreposição (R² / RMSE / SMAPE):
   0,840 (`full`) e 0,716 (`pumps`).
 
 ![Série prevista vs. medida](figures/stf_modelo_serie_full.png)
+
+**Desempenho por frequência.** O R² global de cada saída é a média dos
+R² das bandas de período, ponderada pela variância de cada banda
+(Parseval). O GOTAS acerta onde a variância está e perde onde ela é
+pequena (`figure_spectral_performance.py`, média de 5 treinos):
+
+| Banda (h) | Vazão | Nível | Pressão |
+|---|---|---|---|
+| 16–32 (ciclo diário) | 0,98 | 0,80 | 0,94 |
+| 8–16 | 0,85 | 0,88 | 0,58 |
+| 4–8 | 0,47 | 0,68 | 0,28 |
+| 2–4 | 0,26 | −0,64 | 0,27 |
+| >32 | 0,73 | 0,78 | 0,05 |
+
+- A banda de 16–32 h tem 79% da variância da vazão; abaixo de 8 h há
+  menos de 5% da variância da vazão e do nível (o R² negativo do nível
+  em 2–4 h pesa 0,6%).
+- A pressão tem 16% da variância abaixo de 8 h e uma deriva lenta acima
+  de 32 h que o modelo não captura: é a maior parte da diferença entre a
+  pressão e as outras saídas.
+
+![Espectro medido e previsto](figures/stf_modelo_espectro_full.png)
+
+![R² por banda de período](figures/stf_modelo_r2_banda_full.png)
+
+**Outras GNNs no mesmo protocolo.** MPNN (Gilmer et al., 2017),
+Symbolic Graph Network (Chen et al., 2026), StemGNN (Cao et al., 2020),
+Seq2SeqLatentGNN (Seman et al., 2026) e FourierGNN (Yi et al., 2023)
+foram treinadas no mesmo contrato do GOTAS (entradas futuras, perda,
+cenários e combinação do nível). Para cada uma, quatro configurações
+(janela de 168 ou 24 h, com ou sem a melhor variante de treino da
+triagem) foram comparadas na validação; a escolhida foi avaliada no
+teste com 5 treinos (`run_architectures_tcc.py`). R² médio das três
+saídas:
+
+| Modelo | 1 passo | `full` 6 h | `full` 12 h | `pumps` 6 h | `pumps` 12 h |
+|---|---|---|---|---|---|
+| ARMAX MOGWO | 0,825 | 0,606 | 0,333 | 0,606 | 0,333 |
+| MPNN | 0,863 | 0,834 | 0,782 ± 0,026 | 0,720 | 0,672 |
+| Symbolic Graph Network | 0,870 | 0,837 | 0,785 ± 0,009 | 0,713 | 0,665 |
+| StemGNN | 0,786 | 0,751 | 0,687 ± 0,065 | 0,642 | 0,583 |
+| Seq2SeqLatentGNN | 0,731 | 0,667 | 0,625 ± 0,076 | 0,551 | 0,418 |
+| FourierGNN | 0,854 | 0,821 | 0,757 ± 0,019 | 0,708 | 0,639 |
+| **GOTAS** | **0,889** | **0,862** | **0,833 ± 0,006** | **0,775** | **0,719** |
+
+- Todas superam o ARMAX em simulação livre; nenhuma alcança o GOTAS. As
+  mais próximas ficam de 0,05 a 0,08 abaixo em 12 h no `full`, e a
+  diferença está sobretudo no nível (0,73–0,74 contra 0,81).
+- Os números já incluem a combinação do nível com a cascata; sem ela, o
+  nível dessas redes em 12 h fica entre −0,17 e 0,59, e o do GOTAS em
+  0,61.
+- O GOTAS é o mais estável entre treinos; StemGNN e Seq2SeqLatentGNN
+  variam até 0,08. A tabela com as quatro configurações de cada
+  arquitetura está em `outputs/architectures_tcc_all.json`.
 
 ### 7.3 Qualidade a cada hora do horizonte
 
