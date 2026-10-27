@@ -303,16 +303,16 @@ def reservoir() -> None:  # noqa: PLR0914 - one figure, linear
     plt.close(fig)
 
 
-# Grafo do reservatório em miniatura: entradas à esquerda, saídas à direita;
+# Grafo do reservatório em miniatura, em layout orgânico (estilo da DCRNN);
 # arestas com dependência forte no treino (Granger, `gnn_reservatorio`).
 MINI_POS = {
-    "freq_b1": (-1.0, 1.2),
-    "freq_b2": (-1.0, 0.4),
-    "freq_b3": (-1.0, -0.4),
-    "vazao_entrada": (-1.0, -1.2),
-    "vazao_distribuicao": (1.0, 0.9),
-    "nivel_res": (1.0, 0.0),
-    "pressao": (1.0, -0.9),
+    "freq_b1": (-1.05, 0.95),
+    "freq_b2": (-1.25, 0.0),
+    "freq_b3": (-0.85, -0.85),
+    "vazao_entrada": (0.25, -1.15),
+    "vazao_distribuicao": (-0.15, 0.3),
+    "nivel_res": (1.0, -0.3),
+    "pressao": (0.8, 1.0),
 }
 MINI_EDGES = [
     ("freq_b1", "vazao_distribuicao"),
@@ -325,6 +325,7 @@ MINI_EDGES = [
     ("vazao_distribuicao", "pressao"),
     ("nivel_res", "pressao"),
 ]
+NODE_C, EDGE_C, CARD_EC = "#5b8fd1", "#7fa3d6", "#cccccc"
 
 
 def mini_graph(  # noqa: PLR0913
@@ -336,19 +337,21 @@ def mini_graph(  # noqa: PLR0913
     zorder: int,
     only_outputs: bool = False,
 ) -> None:
-    """Reservoir graph on a card; node colour = value at that hour."""
-    ax.add_patch(
-        FancyBboxPatch(
-            (cx - 1.75 * scale, cy - 1.75 * scale),
-            3.5 * scale,
-            3.5 * scale,
-            boxstyle="round,pad=0.02",
-            fc="white",
-            ec="#999",
-            lw=0.8,
-            zorder=zorder,
+    """Reservoir graph on a card; node shade = value at that hour."""
+    half = 1.7 * scale
+    for dx, fc, ec in ((0.07, "#00000022", "none"), (0, "white", CARD_EC)):
+        ax.add_patch(
+            FancyBboxPatch(
+                (cx - half + dx, cy - half - dx),
+                2 * half,
+                2 * half,
+                boxstyle="round,pad=0.06",
+                fc=fc,
+                ec=ec,
+                lw=0.9,
+                zorder=zorder,
+            )
         )
-    )
     xy = {
         k: (cx + scale * x, cy + scale * y) for k, (x, y) in MINI_POS.items()
     }
@@ -356,24 +359,21 @@ def mini_graph(  # noqa: PLR0913
         ax.plot(
             [xy[a][0], xy[b][0]],
             [xy[a][1], xy[b][1]],
-            color="#bbb",
-            lw=0.6,
+            color=EDGE_C,
+            lw=0.8,
             zorder=zorder + 1,
         )
     for k, (x, y) in xy.items():
-        out = k in OUTPUT_COLS
-        if values is None or (only_outputs and not out):
-            fc = "#f2f2f2"
+        if values is None or (only_outputs and k not in OUTPUT_COLS):
+            fc = "#e3e3e3"
         else:
-            cmap = plt.cm.Purples if out else plt.cm.Reds
-            fc = cmap(0.15 + 0.65 * values[k])
+            fc = plt.cm.Blues(0.35 + 0.6 * values[k])
         ax.add_patch(
             plt.Circle(
                 (x, y),
-                0.28 * scale,
+                0.24 * scale,
                 fc=fc,
-                ec="#555",
-                lw=0.6,
+                ec="none",
                 zorder=zorder + 2,
             )
         )
@@ -386,14 +386,37 @@ def stack(  # noqa: PLR0913
     rows: list[dict[str, float] | None],
     scale: float = 0.62,
     only_outputs: bool = False,
+    fs: float = 10.5,
 ) -> None:
-    """Cards of mini graphs, one per hour, the last one in front."""
-    step = 0.32
+    """Cards of mini graphs, older hours behind (lower left), as in DCRNN."""
+    step, half = 0.34, 1.7 * 0.62
+    n = len(rows)
     for d, values in enumerate(rows):
-        off = (len(rows) - 1 - d) * step
+        off = (n - 1 - d) * step
         mini_graph(
-            ax, cx - off, cy + off, scale, values, 10 + 4 * d, only_outputs
+            ax, cx - off, cy - off, scale, values, 10 + 4 * d, only_outputs
         )
+    # seta do tempo ao longo da diagonal, junto aos cantos superiores
+    back = (n - 1) * step
+    p0 = (cx - back - half - 0.45, cy - back + half + 0.05)
+    p1 = (cx - half - 0.45, cy + half + 0.05)
+    ax.annotate(
+        "",
+        xy=p1,
+        xytext=p0,
+        arrowprops=dict(arrowstyle="-|>", color="#555", lw=0.9),
+        zorder=30,
+    )
+    ax.text(
+        (p0[0] + p1[0]) / 2 - 0.3,
+        (p0[1] + p1[1]) / 2 + 0.3,
+        "tempo",
+        rotation=45,
+        ha="center",
+        va="center",
+        fontsize=fs,
+        color="#444",
+    )
 
 
 def block(ax, x0, y0, w, h, fc, ec, title) -> None:  # noqa: ANN001, PLR0913
@@ -465,19 +488,19 @@ def stgnn() -> None:  # noqa: PLR0914, PLR0915 - one figure, linear
         arrowprops=dict(arrowstyle="-|>", color="#555", lw=0.8),
     )
     arrow(ax, (5.3, 5), (6.9, 5), shrinkA=0, shrinkB=0)
-    ax.text(6.1, 5.4, "1 grafo\npor hora", ha="center", fontsize=fs)
+    ax.text(6.1, 3.85, "1 grafo\npor hora", ha="center", fontsize=fs)
 
     # 2. Um grafo por hora: mesma estrutura, sinais diferentes nos nós.
     stack(
         ax,
-        9.4,
+        10.2,
         4.6,
         [at(r) for r in range(past - n_past + 1, past + 1)],
     )
     ax.text(
-        9.1, 8.0, "sinais no grafo\n(passado)", ha="center", fontsize=fs_title
+        9.6, 8.0, "sinais no grafo\n(passado)", ha="center", fontsize=fs_title
     )
-    ax.text(9.6, 2.1, r"$t-W+1,\ \dots,\ t$", ha="center", fontsize=fs)
+    ax.text(9.6, 1.75, r"$t-W+1,\ \dots,\ t$", ha="center", fontsize=fs)
 
     # 3. Bloco espaço-temporal: operação no grafo, depois no tempo.
     block(ax, 12.0, 1.4, 10.6, 6.4, "#f7f9fd", "#6c8ebf", "")
@@ -586,12 +609,12 @@ def stgnn() -> None:  # noqa: PLR0914, PLR0915 - one figure, linear
         fontsize=fs,
         zorder=3,
     )
-    arrow(ax, (22.8, 4.6), (23.9, 4.6), shrinkA=0, shrinkB=0)
+    arrow(ax, (22.8, 4.6), (23.6, 4.6), shrinkA=0, shrinkB=0)
 
     # 4. Saída: os grafos do futuro e as séries previstas.
-    stack(ax, 26.3, 4.6, [at(r) for r in future], only_outputs=True)
-    ax.text(26.0, 8.0, "previsão\n(futuro)", ha="center", fontsize=fs_title)
-    ax.text(26.5, 2.1, r"$t+1,\ \dots,\ t+H$", ha="center", fontsize=fs)
+    stack(ax, 26.9, 4.6, [at(r) for r in future], only_outputs=True)
+    ax.text(26.4, 8.0, "previsão\n(futuro)", ha="center", fontsize=fs_title)
+    ax.text(26.4, 1.75, r"$t+1,\ \dots,\ t+H$", ha="center", fontsize=fs)
     arrow(ax, (28.5, 4.6), (29.4, 4.6), shrinkA=0, shrinkB=0)
     rng = np.random.default_rng(7)
     for c, y in zip(OUTPUT_COLS, (7.0, 4.6, 2.2), strict=True):
