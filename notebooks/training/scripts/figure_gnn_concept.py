@@ -6,6 +6,10 @@
 2. `gnn_reservatorio`: as 7 séries do treino como nós (trecho real de
    7 dias) e as arestas para as saídas, com espessura pela causalidade
    de Granger (`report_graph_dependency.py`).
+3. `stgnn_reservatorio`: GNN espaço-temporal no contexto do reservatório,
+   no lugar da figura da DCRNN: as séries viram um grafo por hora, uma
+   operação no grafo mistura os nós, uma operação no tempo encadeia as
+   horas e a saída são os grafos (e as séries) do futuro.
 
 Uso (da raiz do repo):
     uv run python notebooks/training/scripts/figure_gnn_concept.py
@@ -29,6 +33,7 @@ from mimo_sys.training.data import (
 
 FIG = PROJECT_ROOT / "docs" / "figures"
 OVERLEAF = PROJECT_ROOT / "overleaf" / "imagens"
+OVERLEAF_REPO = PROJECT_ROOT.parent / "TCC_MIMO_SYS_overleaf" / "imagens"
 DEP = PROJECT_ROOT / "outputs" / "graph_dependency.json"
 LABEL = {
     "freq_b1": "bomba 1",
@@ -298,8 +303,340 @@ def reservoir() -> None:  # noqa: PLR0914 - one figure, linear
     plt.close(fig)
 
 
+# Grafo do reservatório em miniatura: entradas à esquerda, saídas à direita;
+# arestas com dependência forte no treino (Granger, `gnn_reservatorio`).
+MINI_POS = {
+    "freq_b1": (-1.0, 1.2),
+    "freq_b2": (-1.0, 0.4),
+    "freq_b3": (-1.0, -0.4),
+    "vazao_entrada": (-1.0, -1.2),
+    "vazao_distribuicao": (1.0, 0.9),
+    "nivel_res": (1.0, 0.0),
+    "pressao": (1.0, -0.9),
+}
+MINI_EDGES = [
+    ("freq_b1", "vazao_distribuicao"),
+    ("freq_b2", "vazao_distribuicao"),
+    ("freq_b3", "vazao_distribuicao"),
+    ("freq_b1", "pressao"),
+    ("freq_b2", "pressao"),
+    ("vazao_entrada", "nivel_res"),
+    ("vazao_distribuicao", "nivel_res"),
+    ("vazao_distribuicao", "pressao"),
+    ("nivel_res", "pressao"),
+]
+
+
+def mini_graph(  # noqa: PLR0913
+    ax,  # noqa: ANN001
+    cx: float,
+    cy: float,
+    scale: float,
+    values: dict[str, float] | None,
+    zorder: int,
+    only_outputs: bool = False,
+) -> None:
+    """Reservoir graph on a card; node colour = value at that hour."""
+    ax.add_patch(
+        FancyBboxPatch(
+            (cx - 1.75 * scale, cy - 1.75 * scale),
+            3.5 * scale,
+            3.5 * scale,
+            boxstyle="round,pad=0.02",
+            fc="white",
+            ec="#999",
+            lw=0.8,
+            zorder=zorder,
+        )
+    )
+    xy = {
+        k: (cx + scale * x, cy + scale * y) for k, (x, y) in MINI_POS.items()
+    }
+    for a, b in MINI_EDGES:
+        ax.plot(
+            [xy[a][0], xy[b][0]],
+            [xy[a][1], xy[b][1]],
+            color="#bbb",
+            lw=0.6,
+            zorder=zorder + 1,
+        )
+    for k, (x, y) in xy.items():
+        out = k in OUTPUT_COLS
+        if values is None or (only_outputs and not out):
+            fc = "#f2f2f2"
+        else:
+            cmap = plt.cm.Purples if out else plt.cm.Reds
+            fc = cmap(0.15 + 0.65 * values[k])
+        ax.add_patch(
+            plt.Circle(
+                (x, y),
+                0.28 * scale,
+                fc=fc,
+                ec="#555",
+                lw=0.6,
+                zorder=zorder + 2,
+            )
+        )
+
+
+def stack(  # noqa: PLR0913
+    ax,  # noqa: ANN001
+    cx: float,
+    cy: float,
+    rows: list[dict[str, float] | None],
+    scale: float = 0.62,
+    only_outputs: bool = False,
+) -> None:
+    """Cards of mini graphs, one per hour, the last one in front."""
+    step = 0.32
+    for d, values in enumerate(rows):
+        off = (len(rows) - 1 - d) * step
+        mini_graph(
+            ax, cx - off, cy + off, scale, values, 10 + 4 * d, only_outputs
+        )
+
+
+def block(ax, x0, y0, w, h, fc, ec, title) -> None:  # noqa: ANN001, PLR0913
+    ax.add_patch(
+        FancyBboxPatch(
+            (x0, y0),
+            w,
+            h,
+            boxstyle="round,pad=0.1",
+            fc=fc,
+            ec=ec,
+            lw=1.2,
+            linestyle=(0, (4, 3)),
+            zorder=1,
+        )
+    )
+    ax.text(x0 + w / 2, y0 + h + 0.35, title, ha="center", fontsize=10)
+
+
+def stgnn() -> None:  # noqa: PLR0914, PLR0915 - one figure, linear
+    train = load_splits()["train"]
+    cols = list(INPUT_COLS) + list(OUTPUT_COLS)
+    seg = train[651:711]  # 60 h sem falhas, com as 7 séries variando
+    norm = (seg - seg.min(0)) / (np.ptp(seg, 0) + 1e-9)
+    past, n_past = 47, 4  # hora t e quantos grafos do passado desenhar
+    future = [past + 4, past + 8, past + 12]
+
+    def at(row: int) -> dict[str, float]:
+        return {c: norm[row, cols.index(c)] for c in cols}
+
+    fs_title, fs = 12, 10.5
+    fig, ax = plt.subplots(figsize=(13, 4.6))
+    ax.set_xlim(0, 34)
+    ax.set_ylim(-0.9, 10)
+    ax.axis("off")
+
+    # 1. As séries do reservatório, com as horas marcadas.
+    ax.text(
+        2.6, 9.55, "séries do reservatório", ha="center", fontsize=fs_title
+    )
+    ys = np.linspace(8.5, 1.3, len(cols))
+    for k, (c, y) in enumerate(zip(cols, ys, strict=True)):
+        color = "#b85450" if c in INPUT_COLS else "#9673a6"
+        sub = sparkline(
+            fig,
+            ax,
+            (3.3, y),
+            seg[: past + 1, k],
+            w=0.075,
+            h=0.05,
+            color=color,
+        )
+        sub.set_xlim(0, past)
+        sub.axvspan(past - n_past + 0.5, past, color="#dae8fc", lw=0)
+        ax.text(
+            1.3,
+            y,
+            LABEL[c].replace("\n", " "),
+            ha="right",
+            va="center",
+            fontsize=fs,
+        )
+    ax.annotate(
+        "tempo",
+        xy=(4.9, 0.35),
+        xytext=(1.8, 0.35),
+        fontsize=fs,
+        va="center",
+        arrowprops=dict(arrowstyle="-|>", color="#555", lw=0.8),
+    )
+    arrow(ax, (5.3, 5), (6.9, 5), shrinkA=0, shrinkB=0)
+    ax.text(6.1, 5.4, "1 grafo\npor hora", ha="center", fontsize=fs)
+
+    # 2. Um grafo por hora: mesma estrutura, sinais diferentes nos nós.
+    stack(
+        ax,
+        9.4,
+        4.6,
+        [at(r) for r in range(past - n_past + 1, past + 1)],
+    )
+    ax.text(
+        9.1, 8.0, "sinais no grafo\n(passado)", ha="center", fontsize=fs_title
+    )
+    ax.text(9.6, 2.1, r"$t-W+1,\ \dots,\ t$", ha="center", fontsize=fs)
+
+    # 3. Bloco espaço-temporal: operação no grafo, depois no tempo.
+    block(ax, 12.0, 1.4, 10.6, 6.4, "#f7f9fd", "#6c8ebf", "")
+    ax.text(
+        17.3,
+        8.3,
+        "bloco espaço-temporal\n(repetido em camadas)",
+        ha="center",
+        fontsize=fs_title,
+    )
+    # 3a. operação no grafo: mensagens dos vizinhos para um nó
+    ax.add_patch(
+        FancyBboxPatch(
+            (12.4, 1.9),
+            4.5,
+            5.3,
+            boxstyle="round,pad=0.08",
+            fc="#dae8fc",
+            ec="#6c8ebf",
+            lw=1,
+            zorder=2,
+        )
+    )
+    ax.text(14.65, 6.65, "no grafo", ha="center", fontsize=fs_title, zorder=3)
+    centre = (14.65, 4.75)
+    nbrs = [(13.4, 5.75), (15.9, 5.75), (13.4, 3.75), (15.9, 3.75)]
+    for q in nbrs:
+        arrow(
+            ax,
+            q,
+            centre,
+            color="#6c8ebf",
+            shrinkA=8,
+            shrinkB=10,
+            mutation_scale=9,
+            lw=1,
+            zorder=3,
+        )
+        ax.add_patch(
+            plt.Circle(q, 0.32, fc="white", ec="#333", lw=0.9, zorder=4)
+        )
+    ax.add_patch(
+        plt.Circle(centre, 0.42, fc="#ffe6cc", ec="#333", lw=1, zorder=4)
+    )
+    ax.text(
+        14.65,
+        2.3,
+        "mistura entre\nos nós",
+        ha="center",
+        fontsize=fs,
+        zorder=3,
+    )
+    arrow(ax, (17.0, 4.6), (17.6, 4.6), shrinkA=0, shrinkB=0, zorder=3)
+    # 3b. operação no tempo: recorrência em cada nó
+    ax.add_patch(
+        FancyBboxPatch(
+            (17.7, 1.9),
+            4.6,
+            5.3,
+            boxstyle="round,pad=0.08",
+            fc="#d5e8d4",
+            ec="#82b366",
+            lw=1,
+            zorder=2,
+        )
+    )
+    ax.text(20.0, 6.65, "no tempo", ha="center", fontsize=fs_title, zorder=3)
+    cells = [(18.6, 4.6), (20.0, 4.6), (21.4, 4.6)]
+    for k, q in enumerate(cells):
+        ax.add_patch(
+            FancyBboxPatch(
+                (q[0] - 0.4, q[1] - 0.4),
+                0.8,
+                0.8,
+                boxstyle="round,pad=0.03",
+                fc="white",
+                ec="#333",
+                lw=0.9,
+                zorder=4,
+            )
+        )
+        ax.text(
+            q[0],
+            q[1] - 0.85,
+            [r"$t-2$", r"$t-1$", r"$t$"][k],
+            ha="center",
+            fontsize=fs,
+            zorder=4,
+        )
+        if k:
+            arrow(
+                ax,
+                cells[k - 1],
+                q,
+                shrinkA=9,
+                shrinkB=9,
+                mutation_scale=8,
+                lw=0.9,
+                zorder=4,
+            )
+    ax.text(
+        20.0,
+        2.3,
+        "memória em\ncada nó",
+        ha="center",
+        fontsize=fs,
+        zorder=3,
+    )
+    arrow(ax, (22.8, 4.6), (23.9, 4.6), shrinkA=0, shrinkB=0)
+
+    # 4. Saída: os grafos do futuro e as séries previstas.
+    stack(ax, 26.3, 4.6, [at(r) for r in future], only_outputs=True)
+    ax.text(26.0, 8.0, "previsão\n(futuro)", ha="center", fontsize=fs_title)
+    ax.text(26.5, 2.1, r"$t+1,\ \dots,\ t+H$", ha="center", fontsize=fs)
+    arrow(ax, (28.5, 4.6), (29.4, 4.6), shrinkA=0, shrinkB=0)
+    rng = np.random.default_rng(7)
+    for c, y in zip(OUTPUT_COLS, (7.0, 4.6, 2.2), strict=True):
+        k = cols.index(c)
+        sub = sparkline(
+            fig,
+            ax,
+            (31.9, y),
+            seg[:, k],
+            w=0.07,
+            h=0.07,
+            color="black",
+        )
+        hz = np.arange(past, len(seg))
+        noise = 0.04 * np.ptp(seg[:, k]) * rng.normal(size=len(hz)).cumsum()
+        sub.plot(hz, seg[hz, k] + noise, color="tab:red", lw=1)
+        sub.axvline(past, color="#999", lw=0.6)
+        sub.set_xlim(0, len(seg) - 1)
+        ax.text(
+            31.9,
+            y + 1.05,
+            LABEL[c].replace("\n", " "),
+            ha="center",
+            fontsize=fs,
+        )
+
+    ax.text(
+        17.0,
+        -0.75,
+        "nó = série  ·  aresta = dependência entre séries  ·  "
+        "a estrutura do grafo é a mesma em todas as horas; "
+        "muda só o valor em cada nó (cor)",
+        ha="center",
+        fontsize=fs,
+        color="#444",
+    )
+    fig.savefig(FIG / "stgnn_reservatorio.png", dpi=200, bbox_inches="tight")
+    fig.savefig(FIG / "stgnn_reservatorio.pdf", bbox_inches="tight")
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     concept()
     reservoir()
+    stgnn()
     for name in ("gnn_conceito.pdf", "gnn_reservatorio.pdf"):
         shutil.copy(FIG / name, OVERLEAF / name)
+    shutil.copy(FIG / "stgnn_reservatorio.pdf", OVERLEAF_REPO)

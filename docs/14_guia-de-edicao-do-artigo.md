@@ -151,7 +151,7 @@ nunca do modelo linear antigo do doc 8.
 | Figura no artigo | Arquivo | Gerada por |
 |---|---|---|
 | GNN: conceito (a)(b)(c) | `gnn_conceito.pdf` | `notebooks/training/scripts/figure_gnn_concept.py` |
-| DCRNN (terceiros) | `dcrnn_li2018.png` | print da Figura 2 de Li et al. (2018), com "Fonte: (LI et al., 2018)" |
+| GNN espaço-temporal no reservatório (substitui o print da DCRNN) | `stgnn_reservatorio.pdf` | `figure_gnn_concept.py` (`stgnn()`), "Fonte: Elaborado pelo autor, com base em Li et al. (2018)" |
 | Fluxograma da metodologia | TikZ no próprio `main.tex` | — |
 | Coerência (a) + polos ARX (b) | `eda_15_coherence.png`, `eda_18_arx_poles.png` | `notebooks/eda/03_eda_series_temporais.ipynb` |
 | STL (a) + variância por banda (b) | `eda_06_stl_decomposition.png`, `decomp_variancia_por_banda.png` | notebook de EDA 03 e `run_decomposition.py` |
