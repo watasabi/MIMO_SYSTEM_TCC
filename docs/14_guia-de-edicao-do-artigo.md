@@ -157,6 +157,7 @@ nunca do modelo linear antigo do doc 8.
 | STL (a) + variância por banda (b) | `eda_06_stl_decomposition.png`, `decomp_variancia_por_banda.png` | notebook de EDA 03 e `run_decomposition.py` |
 | Arquitetura | `stf_arquitetura_drawio.png` | `figure_architecture_drawio.py` (gera o `.drawio`) + exportação pelo MCP do draw.io |
 | Série prevista 12 h | `stf_modelo_serie_full.png` | `report_lean_model.py` |
+| Espectro (a) + R² por banda (b) | `stf_modelo_espectro_full.png`, `stf_modelo_r2_banda_full.png` | `figure_spectral_performance.py` (só lê as previsões salvas e copia para o Overleaf) |
 | R² por passo | `stf_modelo_por_horizonte.pdf` | `report_lean_model.py` |
 | Grafo extraído | `stf_grafo_extraido_full.pdf` | `report_extracted_model.py` |
 | Respostas ao impulso | `stf_kernels_extraidos.png` | `report_extracted_model.py` |
