@@ -163,6 +163,10 @@ nunca do modelo linear antigo do doc 8.
 | Respostas ao impulso | `stf_kernels_extraidos.png` | `report_extracted_model.py` |
 | Força por banda (a) + Laplace (b) | `stf_modelo_band_strength.png`, `stf_modelo_laplace_z.png` | `figure_extracted_graph.py` |
 
+A Tabela de outras GNNs (`tab:gnns`) vem de
+`run_architectures_tcc.py report` (configuração escolhida na validação;
+`report all` lista as quatro configurações de cada arquitetura).
+
 Saíram do artigo, mas o autor pode pedir de volta (as imagens ainda estão
 em `imagens/` do repositório do Overleaf): correlação e Granger,
 ACF/PACF, Welch, espectrograma, cointegração/DTW, resposta ao impulso
