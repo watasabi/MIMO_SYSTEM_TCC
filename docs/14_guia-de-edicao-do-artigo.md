@@ -64,9 +64,11 @@ AGRADECIMENTOS
 REFERÊNCIAS BIBLIOGRÁFICAS
 ```
 
-- **Questão norteadora, objetivo geral e objetivos específicos** ficam na
-  Introdução como parágrafos com rótulo em negrito
-  (`\textbf{Questão norteadora.}` etc.), não como subseções.
+- **Questão norteadora, objetivo geral e objetivos específicos** fecham a
+  Introdução em texto corrido, nos dois últimos parágrafos: sem rótulo em
+  negrito, sem citação em bloco, sem lista e sem subseção (decisão do
+  autor; o modelo Word só exige que os objetivos constem). Não há
+  parágrafo de roteiro das seções depois deles.
 - **A conclusão responde à questão norteadora e a cada objetivo**, em
   parágrafos, sem lista.
 - **Toda equação usada no trabalho é explicada no referencial teórico**
@@ -115,7 +117,9 @@ significância das arestas do modelo final.
 de 6 e 12 h**, o uso operacional; a comparação em 1 passo é só uma
 verificação breve, em texto, porque nela até a persistência explica mais
 de 75% da variância. O artigo de referência é de **Ferrari, Leandro e
-Coelho (2025)**, e o primeiro autor, **A. C. K. Ferrari, é o
+Coelho (2025)**: são três autores, A. C. K. Ferrari, G. V. Leandro e
+L. dos S. Coelho (conferido no PDF); "Leandro" é G. V. Leandro, não o
+prenome de Leandro dos Santos Coelho. O primeiro autor, **A. C. K. Ferrari, é o
 coorientador** do TCC: nunca em tom de crítica. A diferença entre os
 trabalhos é de pergunta e de protocolo; o foco do texto é o GOTAS.
 
