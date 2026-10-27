@@ -6,10 +6,10 @@
 2. `gnn_reservatorio`: as 7 séries do treino como nós (trecho real de
    7 dias) e as arestas para as saídas, com espessura pela causalidade
    de Granger (`report_graph_dependency.py`).
-3. `stgnn_reservatorio`: GNN espaço-temporal no contexto do reservatório,
-   no lugar da figura da DCRNN: as séries viram um grafo por hora, uma
-   operação no grafo mistura os nós, uma operação no tempo encadeia as
-   horas e a saída são os grafos (e as séries) do futuro.
+3. `stgnn_generica`: GNN espaço-temporal genérica (como a DCRNN), com
+   séries sintéticas e sem nada do reservatório: as séries viram um grafo
+   por hora, uma operação no grafo mistura os nós, uma operação no tempo
+   encadeia as horas e a saída são os grafos (e as séries) do futuro.
 
 Uso (da raiz do repo):
     uv run python notebooks/training/scripts/figure_gnn_concept.py
@@ -33,7 +33,6 @@ from mimo_sys.training.data import (
 
 FIG = PROJECT_ROOT / "docs" / "figures"
 OVERLEAF = PROJECT_ROOT / "overleaf" / "imagens"
-OVERLEAF_REPO = PROJECT_ROOT.parent / "TCC_MIMO_SYS_overleaf" / "imagens"
 DEP = PROJECT_ROOT / "outputs" / "graph_dependency.json"
 LABEL = {
     "freq_b1": "bomba 1",
@@ -303,27 +302,25 @@ def reservoir() -> None:  # noqa: PLR0914 - one figure, linear
     plt.close(fig)
 
 
-# Grafo do reservatório em miniatura, em layout orgânico (estilo da DCRNN);
-# arestas com dependência forte no treino (Granger, `gnn_reservatorio`).
+# Grafo genérico em miniatura, em layout orgânico (estilo da DCRNN).
 MINI_POS = {
-    "freq_b1": (-1.05, 0.95),
-    "freq_b2": (-1.25, 0.0),
-    "freq_b3": (-0.85, -0.85),
-    "vazao_entrada": (0.25, -1.15),
-    "vazao_distribuicao": (-0.15, 0.3),
-    "nivel_res": (1.0, -0.3),
-    "pressao": (0.8, 1.0),
+    1: (-1.05, 0.95),
+    2: (-1.2, -0.2),
+    3: (-0.5, -1.05),
+    4: (0.05, 0.25),
+    5: (0.95, 0.95),
+    6: (1.0, -0.6),
 }
 MINI_EDGES = [
-    ("freq_b1", "vazao_distribuicao"),
-    ("freq_b2", "vazao_distribuicao"),
-    ("freq_b3", "vazao_distribuicao"),
-    ("freq_b1", "pressao"),
-    ("freq_b2", "pressao"),
-    ("vazao_entrada", "nivel_res"),
-    ("vazao_distribuicao", "nivel_res"),
-    ("vazao_distribuicao", "pressao"),
-    ("nivel_res", "pressao"),
+    (1, 2),
+    (1, 4),
+    (2, 3),
+    (2, 4),
+    (3, 4),
+    (3, 6),
+    (4, 5),
+    (4, 6),
+    (5, 6),
 ]
 NODE_C, EDGE_C, CARD_EC = "#5b8fd1", "#7fa3d6", "#cccccc"
 
@@ -333,11 +330,10 @@ def mini_graph(  # noqa: PLR0913
     cx: float,
     cy: float,
     scale: float,
-    values: dict[str, float] | None,
+    values: dict[int, float],
     zorder: int,
-    only_outputs: bool = False,
 ) -> None:
-    """Reservoir graph on a card; node shade = value at that hour."""
+    """Generic graph on a card; node shade = value at that hour."""
     half = 1.7 * scale
     for dx, fc, ec in ((0.07, "#00000022", "none"), (0, "white", CARD_EC)):
         ax.add_patch(
@@ -364,10 +360,7 @@ def mini_graph(  # noqa: PLR0913
             zorder=zorder + 1,
         )
     for k, (x, y) in xy.items():
-        if values is None or (only_outputs and k not in OUTPUT_COLS):
-            fc = "#e3e3e3"
-        else:
-            fc = plt.cm.Blues(0.35 + 0.6 * values[k])
+        fc = plt.cm.Blues(0.35 + 0.6 * values[k])
         ax.add_patch(
             plt.Circle(
                 (x, y),
@@ -383,9 +376,8 @@ def stack(  # noqa: PLR0913
     ax,  # noqa: ANN001
     cx: float,
     cy: float,
-    rows: list[dict[str, float] | None],
+    rows: list[dict[int, float]],
     scale: float = 0.62,
-    only_outputs: bool = False,
     fs: float = 10.5,
 ) -> None:
     """Cards of mini graphs, older hours behind (lower left), as in DCRNN."""
@@ -393,9 +385,7 @@ def stack(  # noqa: PLR0913
     n = len(rows)
     for d, values in enumerate(rows):
         off = (n - 1 - d) * step
-        mini_graph(
-            ax, cx - off, cy - off, scale, values, 10 + 4 * d, only_outputs
-        )
+        mini_graph(ax, cx - off, cy - off, scale, values, 10 + 4 * d)
     # seta do tempo ao longo da diagonal, junto aos cantos superiores
     back = (n - 1) * step
     p0 = (cx - back - half - 0.45, cy - back + half + 0.05)
@@ -437,14 +427,24 @@ def block(ax, x0, y0, w, h, fc, ec, title) -> None:  # noqa: ANN001, PLR0913
 
 
 def stgnn() -> None:  # noqa: PLR0914, PLR0915 - one figure, linear
-    train = load_splits()["train"]
-    cols = list(INPUT_COLS) + list(OUTPUT_COLS)
-    seg = train[651:711]  # 60 h sem falhas, com as 7 séries variando
-    norm = (seg - seg.min(0)) / (np.ptp(seg, 0) + 1e-9)
+    # Séries sintéticas: ciclo diário com fase e harmônico próprios.
+    rng = np.random.default_rng(11)
+    hours = np.arange(60)
+    cols = list(MINI_POS)
+    seg = np.stack(
+        [
+            np.sin(2 * np.pi * (hours + 3 * k) / 24)
+            + 0.4 * np.sin(2 * np.pi * (hours + 5 * k) / 12)
+            + 0.15 * rng.normal(size=len(hours))
+            for k in cols
+        ],
+        axis=1,
+    )
+    norm = (seg - seg.min(0)) / np.ptp(seg, 0)
     past, n_past = 47, 4  # hora t e quantos grafos do passado desenhar
     future = [past + 4, past + 8, past + 12]
 
-    def at(row: int) -> dict[str, float]:
+    def at(row: int) -> dict[int, float]:
         return {c: norm[row, cols.index(c)] for c in cols}
 
     fs_title, fs = 12, 10.5
@@ -453,17 +453,15 @@ def stgnn() -> None:  # noqa: PLR0914, PLR0915 - one figure, linear
     ax.set_ylim(-0.9, 10)
     ax.axis("off")
 
-    # 1. As séries do reservatório, com as horas marcadas.
-    ax.text(
-        2.6, 9.55, "séries do reservatório", ha="center", fontsize=fs_title
-    )
+    # 1. As séries, com as horas usadas marcadas.
+    ax.text(2.6, 9.55, "séries temporais", ha="center", fontsize=fs_title)
     ys = np.linspace(8.5, 1.3, len(cols))
     for k, (c, y) in enumerate(zip(cols, ys, strict=True)):
-        color = "#b85450" if c in INPUT_COLS else "#9673a6"
+        color = "#3b6aa0"
         sub = sparkline(
             fig,
             ax,
-            (3.3, y),
+            (2.7, y),
             seg[: past + 1, k],
             w=0.075,
             h=0.05,
@@ -472,23 +470,23 @@ def stgnn() -> None:  # noqa: PLR0914, PLR0915 - one figure, linear
         sub.set_xlim(0, past)
         sub.axvspan(past - n_past + 0.5, past, color="#dae8fc", lw=0)
         ax.text(
-            1.3,
+            0.9,
             y,
-            LABEL[c].replace("\n", " "),
+            f"$x_{c}$",
             ha="right",
             va="center",
             fontsize=fs,
         )
     ax.annotate(
         "tempo",
-        xy=(4.9, 0.35),
-        xytext=(1.8, 0.35),
+        xy=(4.3, 0.35),
+        xytext=(1.2, 0.35),
         fontsize=fs,
         va="center",
         arrowprops=dict(arrowstyle="-|>", color="#555", lw=0.8),
     )
-    arrow(ax, (5.3, 5), (6.9, 5), shrinkA=0, shrinkB=0)
-    ax.text(6.1, 3.85, "1 grafo\npor hora", ha="center", fontsize=fs)
+    arrow(ax, (4.9, 5), (6.9, 5), shrinkA=0, shrinkB=0)
+    ax.text(6.1, 3.85, "1 grafo por\ninstante", ha="center", fontsize=fs)
 
     # 2. Um grafo por hora: mesma estrutura, sinais diferentes nos nós.
     stack(
@@ -612,12 +610,11 @@ def stgnn() -> None:  # noqa: PLR0914, PLR0915 - one figure, linear
     arrow(ax, (22.8, 4.6), (23.6, 4.6), shrinkA=0, shrinkB=0)
 
     # 4. Saída: os grafos do futuro e as séries previstas.
-    stack(ax, 26.9, 4.6, [at(r) for r in future], only_outputs=True)
+    stack(ax, 26.9, 4.6, [at(r) for r in future])
     ax.text(26.4, 8.0, "previsão\n(futuro)", ha="center", fontsize=fs_title)
     ax.text(26.4, 1.75, r"$t+1,\ \dots,\ t+H$", ha="center", fontsize=fs)
     arrow(ax, (28.5, 4.6), (29.4, 4.6), shrinkA=0, shrinkB=0)
-    rng = np.random.default_rng(7)
-    for c, y in zip(OUTPUT_COLS, (7.0, 4.6, 2.2), strict=True):
+    for c, y in zip(cols[:3], (7.0, 4.6, 2.2), strict=True):
         k = cols.index(c)
         sub = sparkline(
             fig,
@@ -629,30 +626,31 @@ def stgnn() -> None:  # noqa: PLR0914, PLR0915 - one figure, linear
             color="black",
         )
         hz = np.arange(past, len(seg))
-        noise = 0.04 * np.ptp(seg[:, k]) * rng.normal(size=len(hz)).cumsum()
+        noise = 0.03 * np.ptp(seg[:, k]) * rng.normal(size=len(hz)).cumsum()
         sub.plot(hz, seg[hz, k] + noise, color="tab:red", lw=1)
         sub.axvline(past, color="#999", lw=0.6)
         sub.set_xlim(0, len(seg) - 1)
         ax.text(
             31.9,
             y + 1.05,
-            LABEL[c].replace("\n", " "),
+            f"$x_{c}$",
             ha="center",
             fontsize=fs,
         )
 
+    ax.text(31.9, 0.85, "⋮", ha="center", fontsize=fs_title)
     ax.text(
         17.0,
         -0.75,
         "nó = série  ·  aresta = dependência entre séries  ·  "
-        "a estrutura do grafo é a mesma em todas as horas; "
+        "a estrutura do grafo é a mesma em todos os instantes; "
         "muda só o valor em cada nó (cor)",
         ha="center",
         fontsize=fs,
         color="#444",
     )
-    fig.savefig(FIG / "stgnn_reservatorio.png", dpi=200, bbox_inches="tight")
-    fig.savefig(FIG / "stgnn_reservatorio.pdf", bbox_inches="tight")
+    fig.savefig(FIG / "stgnn_generica.png", dpi=200, bbox_inches="tight")
+    fig.savefig(FIG / "stgnn_generica.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -662,4 +660,3 @@ if __name__ == "__main__":
     stgnn()
     for name in ("gnn_conceito.pdf", "gnn_reservatorio.pdf"):
         shutil.copy(FIG / name, OVERLEAF / name)
-    shutil.copy(FIG / "stgnn_reservatorio.pdf", OVERLEAF_REPO)
