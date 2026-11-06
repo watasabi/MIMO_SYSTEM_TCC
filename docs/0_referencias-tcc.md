@@ -44,7 +44,7 @@ A física é conhecida e simples — balanço de massa: `A·dy2/dt = u4 - y1`; `
 ---
 
 ## 2. Cranmer et al. (2020) — *Discovering Symbolic Models from Deep Learning with Inductive Biases*
-NeurIPS 2020, arXiv:2006.11287. Código: github.com/MilesCranmer/symbolic_deep_learning
+NeurIPS 2020, v. 33, p. 17429–17442. Código: github.com/MilesCranmer/symbolic_deep_learning
 
 **Referência metodológica central.** Framework em 4 passos:
 1. Modelo com estrutura interna separável (Graph Network: `φ^e` edge/mensagem, `φ^v` node, `φ^u` global).
@@ -72,7 +72,7 @@ Esse é um resultado forte de vender num TCC.
 ---
 
 ## 3. Cao et al. (2020) — *StemGNN: Spectral Temporal Graph Neural Network*
-NeurIPS 2020, arXiv:2103.07719. Código: github.com/microsoft/StemGNN
+NeurIPS 2020, v. 33, p. 17766–17778. Código: github.com/microsoft/StemGNN
 
 - **GFT** (correlações inter-séries) + **DFT** (dependências temporais) **conjuntamente no domínio espectral**.
 - **Latent Correlation Layer:** GRU → self-attention → matriz de adjacência `W = Softmax(QKᵀ/√d)`. Dispensa topologia prévia.
@@ -107,7 +107,7 @@ linha de pesquisa do grupo aplicada a reservatórios. Ler como "o que o grupo j�
 ---
 
 ## 5. Longa et al. (2023) — *GNNs for temporal graphs: state of the art, open challenges, opportunities*
-arXiv:2302.01018v4. **Survey** — usar para fundamentação teórica e taxonomia.
+Transactions on Machine Learning Research (TMLR), 2023. **Survey** — usar para fundamentação teórica e taxonomia.
 
 - Formalização: Static Graph, **Temporal Graph (TG)**, **DTTG** (discrete-time), **STG** (snapshot-based), **ETG** (event-based).
 - Settings de aprendizado (Fig. 1): transdutivo/indutivo × passado/futuro.
@@ -118,7 +118,7 @@ arXiv:2302.01018v4. **Survey** — usar para fundamentação teórica e taxonomi
 ---
 
 ## 6. Pacheco, Seman, Rigo, Camponogara, Bezerra, **Coelho** (2025) — *GNNs for the Offline Nanosatellite Task Scheduling Problem (SatGNN)*
-arXiv:2303.13773v4. UFSC + UFPR.
+Applied Soft Computing 186:114139 (2026), DOI 10.1016/j.asoc.2025.114139. UFSC + UFPR.
 
 Também do grupo do Coelho, mas **domínio diferente** (otimização combinatória, não identificação).
 GNN sobre representação bipartida de MILP, como heurística primal para o solver SCIP:
@@ -131,7 +131,7 @@ identificação de sistemas nem sobre interpretabilidade.
 ---
 
 ## 7. Autoformer — Wu et al. (2021) — *Decomposition Transformers with Auto-Correlation for Long-Term Series Forecasting*
-NeurIPS 2021, arXiv:2106.13008. **Avaliado e descartado como arquitetura candidata.**
+NeurIPS 2021, v. 34. **Avaliado e descartado como arquitetura candidata.**
 
 - **Auto-Correlation** substitui self-attention: agrega sub-séries por período descoberto via FFT, O(L log L).
 - **Series decomposition block:** separa trend-cyclical / seasonal *progressivamente dentro* da arquitetura,
@@ -162,7 +162,7 @@ mas é trocar uma caixa-preta por outra.
 ---
 
 ## 8. Tan, Soubki & Cranmer (2026) — *SymTorch: Symbolic Distillation of Neural Networks*
-arXiv:2602.21307, DAMTP Cambridge. `pappers/SymTorch_2026.pdf`
+Preprint arXiv:2602.21307 (sem publicação revisada), DAMTP Cambridge. `pappers/SymTorch_2026.pdf`
 
 **Sucessora direta de (2), pelo mesmo autor. Ferramenta central da etapa de extração.**
 
@@ -193,7 +193,7 @@ por trajetória. Ver §4 de [3_investigacao-arquiteturas.md](3_investigacao-arqu
 ---
 
 ## 9. Yi et al. (2023) — *FourierGNN: Rethinking MTS Forecasting from a Pure Graph Perspective*
-NeurIPS 2023, arXiv:2311.06190. BIT / Tongji / Oxford / Macquarie. `pappers/FourierGNN_2023.pdf`
+NeurIPS 2023, v. 36. BIT / Tongji / Oxford / Macquarie. `pappers/FourierGNN_2023.pdf`
 
 **Avaliada como substituta do StemGNN no papel de modelo de acurácia. Decisão: adotada como
 Modelo A.** Racional completo em §2 de [3_investigacao-arquiteturas.md](3_investigacao-arquiteturas.md).
@@ -244,15 +244,15 @@ Modelo A.** Racional completo em §2 de [3_investigacao-arquiteturas.md](3_inves
 
 Em `pappers/`, lidos em diagonal durante a investigação de 2026-10-05 — precisam de ficha própria:
 
-- **SINDy-Autoencoder** — Champion, Lusch, Kutz & Brunton (2019), PNAS, arXiv:1904.02107.
+- **SINDy-Autoencoder** — Champion, Lusch, Kutz & Brunton (2019), PNAS 116(45):22445–22452.
   Rota do bottleneck latente. `SINDyAutoencoder_2019.pdf`
-- **PySR** — Cranmer (2023), arXiv:2305.01582. Engine de SR sob o SymTorch. `PySR_2023.pdf`
-- **Symbolic Graph Networks for PDE Discovery** — arXiv:2603.22380. Cenário ruidoso e esparso.
-- **GNNExplainer** — Ying et al. (2019), arXiv:1903.03894. Rota de subgrafo (só diagnóstico).
-- **PGExplainer** — Luo et al. (2020), arXiv:2011.04573. Versão amortizada/indutiva; preferir a esta.
-- **SubgraphX** — Yuan et al. (2021), arXiv:2102.05152. Shapley, mais fiel, caro.
-- **DLinear** — Zeng et al. (2023), AAAI, arXiv:2205.13504. Sustenta o descarte de (7).
-- **TFT** — Lim et al. (2021), arXiv:1912.09363. Único Transformer com exógenas conhecidas.
+- **PySR** — Cranmer (2023), preprint arXiv:2305.01582. Engine de SR sob o SymTorch. `PySR_2023.pdf`
+- **Symbolic Graph Networks for PDE Discovery** — Chen et al. (2026), preprint arXiv:2603.22380. Cenário ruidoso e esparso.
+- **GNNExplainer** — Ying et al. (2019), NeurIPS, v. 32. Rota de subgrafo (só diagnóstico).
+- **PGExplainer** — Luo et al. (2020), NeurIPS, v. 33. Versão amortizada/indutiva; preferir a esta.
+- **SubgraphX** — Yuan et al. (2021), ICML, PMLR v. 139. Shapley, mais fiel, caro.
+- **DLinear** — Zeng et al. (2023), AAAI, v. 37(9), p. 11121–11128. Sustenta o descarte de (7).
+- **TFT** — Lim et al. (2021), International Journal of Forecasting 37(4):1748–1764. Único Transformer com exógenas conhecidas.
 
 ## Lacunas ainda a cobrir (referências que faltam)
 
