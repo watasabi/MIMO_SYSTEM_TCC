@@ -64,15 +64,23 @@ AGRADECIMENTOS
 REFERÊNCIAS BIBLIOGRÁFICAS
 ```
 
-- **Questão norteadora, objetivo geral e objetivos específicos** fecham a
-  Introdução em texto corrido, nos dois últimos parágrafos: sem rótulo em
-  negrito, sem citação em bloco, sem lista e sem subseção (decisão do
-  autor; o modelo Word só exige que os objetivos constem). Não há
-  parágrafo de roteiro das seções depois deles.
+- **Introdução (revisão do Allan, 2026-11):** tema → problema → objetivo
+  geral → justificativa → objetivos específicos → estrutura do trabalho,
+  em texto corrido, sem rótulo, lista nem subseção. O parágrafo de
+  estrutura do trabalho agora **existe** (pedido do orientador). O
+  estudo de Ferrari et al. fica no referencial (2.1), não na introdução.
+- **Siglas:** definir na primeira ocorrência, com o nome por extenso em
+  inglês (ARMAX, GNN, DCRNN, MPNN, STL, DTW, VAR, AIC, MLP, FFT...).
+- **Resumo:** começa pelo processo de modelagem (identificação de
+  sistemas), não pelo estudo de caso.
 - **A conclusão responde à questão norteadora e a cada objetivo**, em
   parágrafos, sem lista.
 - **Toda equação usada no trabalho é explicada no referencial teórico**
-  (comentário da coordenação). A metodologia aplica e cita as equações
+  (comentário da coordenação), com duas exceções pedidas pelo orientador:
+  R² e RMSE ficam na Metodologia (Procedimentos), e o balanço de massa
+  (continuidade, trapézio, Eq. do balanço) fica no **Apêndice A**, depois
+  das referências. A 2.1 apresenta caixa-branca/cinza/preta antes do
+  ARMAX. A metodologia aplica e cita as equações
   do referencial; equação que não é usada não entra. Hoje o referencial
   tem: ARMAX (1), R² e RMSE (2), continuidade, trapézio e balanço de
   massa, convolução/filtro na frequência, passagem de mensagens, perda
@@ -152,6 +160,7 @@ nunca do modelo linear antigo do doc 8.
 |---|---|---|
 | GNN: conceito (a)(b)(c) | `gnn_conceito.pdf` | `notebooks/training/scripts/figure_gnn_concept.py` |
 | GNN espaço-temporal genérica (substituiu o print da DCRNN) | `stgnn_generica.pdf` | `figure_gnn_concept.py` (`stgnn()`): séries sintéticas, sem o reservatório, para não confundir com o GOTAS; "Fonte: Elaborado pelo autor, com base em Li et al. (2018)" |
+| Séries do reservatório (Materiais) | `dados_series.pdf` | `notebooks/training/scripts/figure_dataset_series.py` |
 | Fluxograma da metodologia | TikZ no próprio `main.tex` | — |
 | Coerência (a) + polos ARX (b) | `eda_15_coherence.png`, `eda_18_arx_poles.png` | `notebooks/eda/03_eda_series_temporais.ipynb` |
 | STL (a) + variância por banda (b) | `eda_06_stl_decomposition.png`, `decomp_variancia_por_banda.png` | notebook de EDA 03 e `run_decomposition.py` |
@@ -172,6 +181,14 @@ em `imagens/` do repositório do Overleaf): correlação e Granger,
 ACF/PACF, Welch, espectrograma, cointegração/DTW, resposta ao impulso
 empírica, grafo do reservatório, protocolos em barras, filtros H(f) e
 erro por banda.
+
+**Tabela 4 (`tab:livre`):** compara o ARMAX MOGWO e o GOTAS no protocolo
+dos autores (recorte, 1 passo: publicado 0,912, recalculado 0,909,
+persistência 0,829, GOTAS 0,902) e em simulação livre de 6 e 12 h no
+teste. O Allan apontou os valores de simulação livre do ARMAX como
+incorretos, porque os parâmetros publicados são arredondados, e ofereceu
+o código MATLAB do MOGWO. Pendente: rodar com os parâmetros completos e
+conferir.
 
 ## 7. Armadilhas já vistas
 
