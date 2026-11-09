@@ -23,6 +23,17 @@ COLORS = {
     "phys": ("#d5e8d4", "#82b366"),
     "out": ("#e1d5e7", "#9673a6"),
     "gray": ("#f5f5f5", "#666666"),
+    "loop": ("#d5f0ef", "#4f9e9a"),
+}
+# Fundo pastel de cada painel; o bloco da coluna principal que ele
+# detalha usa a mesma cor, o que dispensa setas entre os dois.
+PANEL_COLORS = {
+    "A": ("#fff3e6", "#d79b00"),
+    "B": ("#fff3e6", "#d79b00"),
+    "C": ("#eaf7f6", "#4f9e9a"),
+    "D": ("#edf3fc", "#6c8ebf"),
+    "E": ("#eef6ec", "#82b366"),
+    "F": ("#f6eef9", "#9673a6"),
 }
 EDGE = (
     "edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;"
@@ -66,15 +77,16 @@ def box(
 def panel(
     cid: str, x: float, y: float, w: float, h: float, label: str
 ) -> None:
+    fill, stroke = PANEL_COLORS[label[0]]
     vertex(
         cid,
         x,
         y,
         w,
         h,
-        f"<b>{label}</b>",
-        "rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#f9f9f9;"
-        "strokeColor=#333333;strokeWidth=2;verticalAlign=top;"
+        f"<b>Painel {label}</b>",
+        f"rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor={fill};"
+        f"strokeColor={stroke};strokeWidth=2;verticalAlign=top;"
         "align=left;spacingLeft=10;spacingTop=4;fontSize=13;",
     )
 
@@ -144,8 +156,6 @@ def port(exit_: tuple, entry: tuple) -> str:
     )
 
 
-DASHED = "dashed=1;strokeColor=#999999;endArrow=open;endFill=0;"
-
 # --------------------------------------------------------------- title
 text(
     "title",
@@ -203,8 +213,8 @@ vertex(
     W + 60,
     500,
     "<b>× 12 passos: simulação recursiva (painel C)</b>",
-    "rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#f5f5f5;"
-    "strokeColor=#333333;strokeWidth=2;verticalAlign=top;align=left;"
+    "rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#eaf7f6;"
+    "strokeColor=#4f9e9a;strokeWidth=2;verticalAlign=top;align=left;"
     "spacingLeft=10;fontSize=12;",
 )
 box(
@@ -279,11 +289,12 @@ box(
 box(
     "casc",
     630,
-    370,
-    250,
-    96,
+    360,
+    300,
+    116,
     "<b>Cascata física</b> (painel E)<br>balanço de massa com<br>q̂ = u₄ − ŷ₁ "
-    "→ nível<sup>cascata</sup>",
+    "→ nível<sup>cascata</sup><br><i>u₄ futura (full) ou do dia anterior "
+    "(pumps)</i>",
     "phys",
 )
 box(
@@ -342,14 +353,6 @@ edge("e10", "casc", "blend", "cascata", extra=port((0, 0.5), (1, 0.5)))
 edge("e11", "blend", "out_lbl")
 edge("ein", "in_lbl", "seq", extra=port((0.5, 0), (0.25, 1)))
 edge("efut", "fut_lbl", "seq", extra=port((0.5, 0), (0.75, 1)))
-edge(
-    "eu4",
-    "fut_lbl",
-    "casc",
-    "u₄ futura (full) ou<br>do dia anterior (pumps)",
-    ((920, 1352),),
-    port((1, 0.5), (1, 0.5)) + "dashed=1;",
-)
 
 # ------------------------------------------------------ panels (right)
 PX, PW = 1000, 680
@@ -402,8 +405,8 @@ physics = {("u4", "t2"), ("y1", "t2")}
 for cid, _, _ in senders:
     for tid, _ in targets:
         strong = (cid, tid) in physics
-        color = "#82b366" if strong else "#c8c8c8"
-        width = 2.5 if strong else 0.8
+        color = "#82b366" if strong else "#e0e0e0"
+        width = 2.5 if strong else 0.6
         cells.append(
             f'<mxCell id="g_{cid}_{tid}" style="html=1;endArrow=classic;'
             f'endSize=4;strokeColor={color};strokeWidth={width};" edge="1" '
@@ -509,7 +512,7 @@ box(
     170,
     62,
     "filtro de 1 passo<br>na posição W+k",
-    "spec",
+    "loop",
 )
 box("c_out", PX + 500, 705, 160, 62, "ŷ(t+k)", "out")
 text(
@@ -618,31 +621,6 @@ text(
     "inteiras (ρ = 10⁻³)",
     size=12,
     align="left",
-)
-
-# dashed links main -> panels
-edge(
-    "z1",
-    "filt",
-    "pB",
-    points=((950, 975), (950, 510)),
-    extra=DASHED + port((1, 0.5), (0, 0.5)),
-)
-edge(
-    "z0",
-    "filt",
-    "pA",
-    points=((940, 960), (940, 210)),
-    extra=DASHED + port((1, 0.3), (0, 0.5)),
-)
-edge("z2", "loop", "pC", extra=DASHED + port((1, 0.05), (0, 0.5)))
-edge("z3", "resid", "pD", extra=DASHED + port((1, 0.5), (0, 0.5)))
-edge(
-    "z4",
-    "casc",
-    "pE",
-    points=((965, 395), (965, 1190)),
-    extra=DASHED + port((1, 0.25), (0, 0.5)),
 )
 
 model = (
