@@ -16,24 +16,23 @@ OUT = Path.home() / 'code/TCC_MIMO_SYS_overleaf/imagens/dados_series.pdf'
 data = pd.read_parquet(ROOT / 'data/processed/mimo_data.parquet')
 hours = range(len(data))
 
-panels: list[tuple[list[str], list[str], str]] = [
-    (['freq_b1', 'freq_b2', 'freq_b3'],
-     ['bomba 1', 'bomba 2', 'bomba 3'], 'frequência (Hz)'),
-    (['vazao_entrada', 'vazao_distribuicao'],
-     ['entrada $u_4$', 'distribuição $y_1$'], 'vazão (l/s)'),
-    (['nivel_res'], ['nível $y_2$'], 'nível (m)'),
-    (['pressao'], ['pressão $y_3$'], 'pressão (mca)'),
+panels: list[tuple[str, str]] = [
+    ('freq_b1', 'bomba 1 $u_1$ (Hz)'),
+    ('freq_b2', 'bomba 2 $u_2$ (Hz)'),
+    ('freq_b3', 'bomba 3 $u_3$ (Hz)'),
+    ('vazao_entrada', 'vazão de\nentrada $u_4$ (l/s)'),
+    ('vazao_distribuicao', 'vazão de\ndistribuição $y_1$ (l/s)'),
+    ('nivel_res', 'nível $y_2$ (m)'),
+    ('pressao', 'pressão $y_3$ (mca)'),
 ]
 
 n_train, n_val = 1545, 331
-fig, axes = plt.subplots(4, 1, figsize=(10, 7.5), sharex=True)
-for ax, (cols, labels, ylabel) in zip(axes, panels):
-    for col, label in zip(cols, labels):
-        ax.plot(hours, data[col], lw=0.6, label=label)
+fig, axes = plt.subplots(len(panels), 1, figsize=(10, 10), sharex=True)
+for ax, (col, ylabel) in zip(axes, panels):
+    ax.plot(hours, data[col], lw=0.6, color='C0')
     ax.axvspan(n_train, n_train + n_val, color='0.85', zorder=0)
     ax.axvspan(n_train + n_val, len(data), color='0.7', zorder=0)
-    ax.set_ylabel(ylabel)
-    ax.legend(loc='upper left', fontsize=8, ncol=3)
+    ax.set_ylabel(ylabel, fontsize=8)
 
 for start, end in [(550, 1150), (1500, 2000)]:
     axes[0].annotate(
