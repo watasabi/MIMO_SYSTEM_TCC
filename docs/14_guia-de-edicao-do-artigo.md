@@ -164,7 +164,7 @@ nunca do modelo linear antigo do doc 8.
 | Fluxograma da metodologia | TikZ no próprio `main.tex` | — |
 | Coerência (a) + polos ARX (b) | `eda_15_coherence.png`, `eda_18_arx_poles.png` | `notebooks/eda/03_eda_series_temporais.ipynb` |
 | STL (a) + variância por banda (b) | `eda_06_stl_decomposition.png`, `decomp_variancia_por_banda.png` | notebook de EDA 03 e `run_decomposition.py` |
-| Arquitetura | `stf_arquitetura_drawio.png` | `figure_architecture_drawio.py` (gera o `.drawio`) + exportação pelo MCP do draw.io |
+| Arquitetura | `stf_arquitetura_drawio.png` | `docs/figures/stf_arquitetura.drawio`, editado à mão no draw.io (não rodar mais `figure_architecture_drawio.py`: sobrescreve os ajustes) + exportação pelo MCP |
 | Série prevista 12 h | `stf_modelo_serie_full.png` | `report_lean_model.py` |
 | Espectro (a) + R² por banda (b) | `stf_modelo_espectro_full.png`, `stf_modelo_r2_banda_full.png` | `figure_spectral_performance.py` (só lê as previsões salvas e copia para o Overleaf) |
 | R² por passo | `stf_modelo_por_horizonte.pdf` | `report_lean_model.py` |
