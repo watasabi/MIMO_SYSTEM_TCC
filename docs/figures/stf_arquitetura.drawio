@@ -1,1 +1,400 @@
-<mxfile><diagram name="Arquitetura" id="arq"><mxGraphModel dx="2775" dy="1500" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1750" pageHeight="1500" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="title" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=18;" value="&lt;b&gt;GOTAS&lt;/b&gt;: grafo de funções de transferência simulado como ARX, com resíduo não linear e nível pela física" vertex="1"><mxGeometry height="40" width="1640" x="40" y="10" as="geometry"/></mxCell><mxCell id="in_lbl" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;" value="Passado medido (168 h)&lt;br&gt;&lt;i&gt;u₁..u₄, y₁..y₃&lt;/i&gt;" vertex="1"><mxGeometry height="44" width="220" x="120" y="1330" as="geometry"/></mxCell><mxCell id="fut_lbl" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;" value="Entradas conhecidas (12 h)&lt;br&gt;&lt;i&gt;bombas (+ u₄ no full)&lt;/i&gt;" vertex="1"><mxGeometry height="44" width="220" x="380" y="1330" as="geometry"/></mxCell><mxCell id="seq" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Sequência por nó&lt;/b&gt; s&lt;sub&gt;j&lt;/sub&gt; ∈ ℝ&lt;sup&gt;W+H&lt;/sup&gt;, W = 168, H = 12&lt;br&gt;saídas futuras = 0 · nó extra: Σ(u₄ − y₁) das últimas horas" vertex="1"><mxGeometry height="70" width="420" x="140" y="1230" as="geometry"/></mxCell><mxCell id="norm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Centralização&lt;/b&gt; s̃&lt;sub&gt;j&lt;/sub&gt; = s&lt;sub&gt;j&lt;/sub&gt; − μ&lt;sub&gt;j&lt;/sub&gt; (μ do passado; sem dividir por σ)" vertex="1"><mxGeometry height="50" width="420" x="140" y="1150" as="geometry"/></mxCell><mxCell id="loop" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#eaf7f6;strokeColor=#4f9e9a;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;fontSize=12;" value="&lt;b&gt;× 12 passos: simulação recursiva (painel C)&lt;/b&gt;" vertex="1"><mxGeometry height="500" width="480" x="110" y="620" as="geometry"/></mxCell><mxCell id="rfft" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;RFFT&lt;/b&gt; com zero-padding 2(W+H) → S&lt;sub&gt;j&lt;/sub&gt;(f)" vertex="1"><mxGeometry height="46" width="380" x="160" y="1040" as="geometry"/></mxCell><mxCell id="filt" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Grafo de filtros&lt;/b&gt; (painéis A e B)&lt;br&gt;Y&lt;sub&gt;i&lt;/sub&gt;(f) = Σ&lt;sub&gt;j&lt;/sub&gt; H&lt;sub&gt;ij&lt;/sub&gt;(f) · S&lt;sub&gt;j&lt;/sub&gt;(f)" vertex="1"><mxGeometry height="70" width="380" x="160" y="940" as="geometry"/></mxCell><mxCell id="irfft" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;iRFFT&lt;/b&gt;, posição W+k → ŷ&lt;sub&gt;i&lt;/sub&gt;(t+k) + b&lt;sub&gt;i&lt;/sub&gt;" vertex="1"><mxGeometry height="46" width="380" x="160" y="860" as="geometry"/></mxCell><mxCell id="write" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Escreve ŷ(t+k) na sequência&lt;/b&gt;&lt;br&gt;a saída futura k passa a ser a própria previsão" vertex="1"><mxGeometry height="62" width="380" x="160" y="770" as="geometry"/></mxCell><mxCell id="loop_note" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;" value="&lt;i&gt;equação de 1 passo, iterada:&lt;/i&gt;&lt;br&gt;ŷ&lt;sub&gt;i&lt;/sub&gt;(t) = Σ&lt;sub&gt;j&lt;/sub&gt; Σ&lt;sub&gt;τ&lt;/sub&gt; h&lt;sub&gt;ij&lt;/sub&gt;(τ) s̃&lt;sub&gt;j&lt;/sub&gt;(t−τ) + b&lt;sub&gt;i&lt;/sub&gt;" vertex="1"><mxGeometry height="80" width="380" x="160" y="670" as="geometry"/></mxCell><mxCell id="resid" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Resíduo não linear&lt;/b&gt; (painel D)&lt;br&gt;passado de y&lt;sub&gt;i&lt;/sub&gt; → Linear(168→16) → tanh → Linear(16→12)&lt;br&gt;iniciado em 0" vertex="1"><mxGeometry height="120" width="210" x="630" y="930" as="geometry"/></mxCell><mxCell id="plus" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;strokeWidth=1.5;fontSize=18;" value="+" vertex="1"><mxGeometry height="34" width="34" x="333" y="560" as="geometry"/></mxCell><mxCell id="plus_lbl" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;" value="+ μ&lt;sub&gt;i&lt;/sub&gt;" vertex="1"><mxGeometry height="30" width="70" x="372" y="545" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-3" edge="1" parent="1" source="direct" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;defaultLabelBackgroundColor=page;curved=0;" target="casc"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-5" connectable="0" parent="fiqWIdZ9mZWPgGTb98P2-3" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];inheritText=1;defaultLabelBackgroundColor=page;" value="&lt;span style=&quot;background-color: rgb(255, 255, 255);&quot;&gt;ŷ₁&lt;/span&gt;" vertex="1"><mxGeometry relative="1" x="0.0777" y="-2" as="geometry"><mxPoint x="-2" y="-12" as="offset"/></mxGeometry></mxCell><mxCell id="direct" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Saídas diretas&lt;/b&gt; ŷ₁ vazão · ŷ₃ pressão · ŷ₂&lt;sup&gt;direto&lt;/sup&gt; nível" vertex="1"><mxGeometry height="56" width="420" x="140" y="470" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-2" edge="1" parent="1" source="casc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;defaultLabelBackgroundColor=page;curved=0;" target="blend"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-6" connectable="0" parent="fiqWIdZ9mZWPgGTb98P2-2" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];inheritText=1;defaultLabelBackgroundColor=page;" value="Cascata" vertex="1"><mxGeometry relative="1" x="-0.2065" y="-1" as="geometry"><mxPoint as="offset"/></mxGeometry></mxCell><mxCell id="casc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Cascata física&lt;/b&gt; (painel E)&lt;br&gt;balanço de massa com&lt;br&gt;q̂ = u₄ − ŷ₁ → nível&lt;sup&gt;cascata&lt;/sup&gt;&lt;br&gt;&lt;i&gt;u₄ futura (full) ou do dia anterior (pumps)&lt;/i&gt;" vertex="1"><mxGeometry height="116" width="300" x="430" y="299" as="geometry"/></mxCell><mxCell id="blend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Nível combinado&lt;/b&gt; (painel E)&lt;br&gt;ŷ₂(t+h) = w&lt;sub&gt;h&lt;/sub&gt;·cascata + (1 − w&lt;sub&gt;h&lt;/sub&gt;)·direto" vertex="1"><mxGeometry height="70" width="420" x="140" y="185" as="geometry"/></mxCell><mxCell id="out_lbl" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=14;" value="&lt;b&gt;Previsão de 12 h&lt;/b&gt;&lt;br&gt;vazão, nível e pressão" vertex="1"><mxGeometry height="60" width="420" x="140" y="77.5" as="geometry"/></mxCell><mxCell id="e1" edge="1" parent="1" source="seq" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="norm" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="e2" edge="1" parent="1" source="norm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="rfft" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="e3" edge="1" parent="1" source="rfft" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="filt" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="e4" edge="1" parent="1" source="filt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="irfft" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="e5" edge="1" parent="1" source="irfft" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="write" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="eloop" edge="1" parent="1" source="write" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="rfft" value="próximo passo k+1"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="130" y="801"/><mxPoint x="130" y="1063"/></Array></mxGeometry></mxCell><mxCell id="eres_in" edge="1" parent="1" source="norm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="resid" value="passado de y&lt;sub&gt;i&lt;/sub&gt;"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="735" y="1175"/></Array></mxGeometry></mxCell><mxCell id="e6" edge="1" parent="1" source="loop" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="plus" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="eres_out" edge="1" parent="1" source="resid" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="plus" value=""><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="735" y="577"/></Array></mxGeometry></mxCell><mxCell id="e7" edge="1" parent="1" source="plus" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="direct" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="e9" edge="1" parent="1" source="direct" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="blend" value="ŷ₂ direto"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="e11" edge="1" parent="1" source="blend" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="out_lbl" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="ein" edge="1" parent="1" source="in_lbl" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;" target="seq" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="efut" edge="1" parent="1" source="fut_lbl" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;" target="seq" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-86" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#fff3e6;strokeColor=#d79b00;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel A · O grafo: 8 nós emissores → 3 saídas, cada aresta é H&lt;sub&gt;ij&lt;/sub&gt;(f)&lt;/b&gt;" vertex="1"><mxGeometry height="300" width="680" x="860" y="60" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-87" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" value="u₁ bomba 1" vertex="1"><mxGeometry height="25" width="150" x="880" y="95" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-88" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" value="u₂ bomba 2" vertex="1"><mxGeometry height="25" width="150" x="880" y="126" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-89" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" value="u₃ bomba 3" vertex="1"><mxGeometry height="25" width="150" x="880" y="157" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-90" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" value="u₄ vazão entrada" vertex="1"><mxGeometry height="25" width="150" x="880" y="188" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-91" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="y₁ vazão dist." vertex="1"><mxGeometry height="25" width="150" x="880" y="219" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-92" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="y₂ nível" vertex="1"><mxGeometry height="25" width="150" x="880" y="250" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-93" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="y₃ pressão" vertex="1"><mxGeometry height="25" width="150" x="880" y="281" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-94" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="Σ(u₄ − y₁)" vertex="1"><mxGeometry height="25" width="150" x="880" y="312" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-95" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="ŷ₁(t+k)" vertex="1"><mxGeometry height="34" width="110" x="1260" y="125" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-96" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="ŷ₂(t+k)" vertex="1"><mxGeometry height="34" width="110" x="1260" y="195" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-97" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="ŷ₃(t+k)" vertex="1"><mxGeometry height="34" width="110" x="1260" y="265" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-98" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-87" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-99" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-87" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-100" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-87" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-101" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-88" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-102" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-88" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-103" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-88" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-104" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-89" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-105" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-89" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-106" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-89" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-107" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-90" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-108" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-90" style="html=1;endArrow=classic;endSize=4;strokeColor=#82b366;strokeWidth=2.5;" target="fiqWIdZ9mZWPgGTb98P2-96"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-109" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-90" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-110" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-91" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-111" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-91" style="html=1;endArrow=classic;endSize=4;strokeColor=#82b366;strokeWidth=2.5;" target="fiqWIdZ9mZWPgGTb98P2-96"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-112" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-91" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-113" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-92" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-114" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-92" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-115" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-92" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-116" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-93" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-117" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-93" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-118" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-93" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-119" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-94" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-120" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-94" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-121" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-94" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-122" parent="1" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;fontSize=11;" value="&lt;b&gt;nó&lt;/b&gt; = série (sequência s&lt;sub&gt;j&lt;/sub&gt;)&lt;br&gt;&lt;br&gt;&lt;b&gt;aresta j → i&lt;/b&gt; = filtro H&lt;sub&gt;ij&lt;/sub&gt;(f)&lt;br&gt;&lt;br&gt;&lt;b&gt;mensagem&lt;/b&gt; = s&lt;sub&gt;j&lt;/sub&gt; filtrado&lt;br&gt;&lt;br&gt;&lt;b&gt;agregação&lt;/b&gt; = Σ&lt;sub&gt;j&lt;/sub&gt;&lt;br&gt;&lt;br&gt;&lt;font color='#82b366'&gt;&lt;b&gt;verde&lt;/b&gt;&lt;/font&gt;: o balanço de massa (u₄ → nível, y₁ → nível)" vertex="1"><mxGeometry height="250" width="145" x="1385" y="95" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-123" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#fff3e6;strokeColor=#d79b00;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel B · Aresta espectral j → i: função de transferência em 8 bandas&lt;/b&gt;" vertex="1"><mxGeometry height="260" width="680" x="860" y="380" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-124" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.5;fontSize=12;" value="s̃&lt;sub&gt;j&lt;/sub&gt;(t)&lt;br&gt;W+H amostras" vertex="1"><mxGeometry height="50" width="120" x="880" y="420" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-125" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="RFFT&lt;br&gt;n = 2(W+H)" vertex="1"><mxGeometry height="50" width="120" x="1025" y="420" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-126" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;strokeWidth=1.5;fontSize=18;" value="×" vertex="1"><mxGeometry height="34" width="34" x="1172" y="428" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-127" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="Σ&lt;sub&gt;j&lt;/sub&gt; sobre&lt;br&gt;emissores" vertex="1"><mxGeometry height="50" width="120" x="1235" y="420" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-128" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="iRFFT → ŷ&lt;sub&gt;i&lt;/sub&gt;" vertex="1"><mxGeometry height="50" width="130" x="1385" y="420" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-129" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;8 coeficientes complexos&lt;/b&gt; c&lt;sub&gt;ij,m&lt;/sub&gt;&lt;br&gt;centros log-espaçados (m = 0 em DC)&lt;br&gt;3 × 8 × 8 × 2 + 3 = 387 parâmetros" vertex="1"><mxGeometry height="70" width="300" x="880" y="505" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-130" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Interpolação&lt;/b&gt; H&lt;sub&gt;ij&lt;/sub&gt;(f) = Σ&lt;sub&gt;m&lt;/sub&gt; Λ&lt;sub&gt;m&lt;/sub&gt;(f) c&lt;sub&gt;ij,m&lt;/sub&gt;&lt;br&gt;Λ&lt;sub&gt;m&lt;/sub&gt;: chapéus lineares, Σ&lt;sub&gt;m&lt;/sub&gt; Λ&lt;sub&gt;m&lt;/sub&gt;(f) = 1" vertex="1"><mxGeometry height="70" width="310" x="1205" y="505" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-131" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;" value="h&lt;sub&gt;ij&lt;/sub&gt;(τ) = iRFFT(H&lt;sub&gt;ij&lt;/sub&gt;)(τ): o kernel lido da aresta; o zero-padding torna a convolução linear, não circular" vertex="1"><mxGeometry height="45" width="640" x="880" y="585" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-132" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-124" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-125" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-133" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-125" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-126" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-134" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-126" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-127" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-135" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-127" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-128" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-136" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-129" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-130" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-137" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-130" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0.05;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="fiqWIdZ9mZWPgGTb98P2-126" value="H&lt;sub&gt;ij&lt;/sub&gt;(f)"><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-138" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#eaf7f6;strokeColor=#4f9e9a;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel C · Simulação recursiva de 1 passo (como se simula um ARX)&lt;/b&gt;" vertex="1"><mxGeometry height="210" width="680" x="860" y="660" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-139" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.5;fontSize=12;" value="sequência no passo k:&lt;br&gt;[ passado 168 h | ŷ(t+1..t+k−1) | 0 … ]" vertex="1"><mxGeometry height="62" width="250" x="880" y="705" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-140" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5f0ef;strokeColor=#4f9e9a;strokeWidth=1.5;fontSize=12;" value="filtro de 1 passo&lt;br&gt;na posição W+k" vertex="1"><mxGeometry height="62" width="170" x="1160" y="705" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-141" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="ŷ(t+k)" vertex="1"><mxGeometry height="62" width="160" x="1360" y="705" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-142" parent="1" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;fontSize=11;" value="• auto-arestas H&lt;sub&gt;ii&lt;/sub&gt;: parte autorregressiva (polos); arestas das entradas: parte exógena&lt;br&gt;• entradas conhecidas entram passo a passo; saídas futuras recebem a própria previsão&lt;br&gt;• um filtro aplicado de uma vez dá R² negativo em 12 h; iterado, 0,79" vertex="1"><mxGeometry height="80" width="640" x="880" y="780" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-143" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-139" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-140" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-144" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-140" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-141" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-145" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-141" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="fiqWIdZ9mZWPgGTb98P2-139" value="k ← k+1"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1440" y="690"/><mxPoint x="1005" y="690"/></Array></mxGeometry></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-146" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#edf3fc;strokeColor=#6c8ebf;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel D · Resíduo não linear (por saída)&lt;/b&gt;" vertex="1"><mxGeometry height="170" width="680" x="860" y="890" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-147" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.5;fontSize=12;" value="passado centrado&lt;br&gt;de y&lt;sub&gt;i&lt;/sub&gt; (168)" vertex="1"><mxGeometry height="60" width="150" x="880" y="935" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-148" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontSize=12;" value="Linear&lt;br&gt;168 → 16" vertex="1"><mxGeometry height="60" width="120" x="1055" y="935" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-149" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontSize=12;" value="tanh" vertex="1"><mxGeometry height="60" width="80" x="1200" y="935" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-150" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontSize=12;" value="Linear&lt;br&gt;16 → 12&lt;br&gt;(início = 0)" vertex="1"><mxGeometry height="60" width="120" x="1305" y="935" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-151" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="r&lt;sub&gt;i&lt;/sub&gt;" vertex="1"><mxGeometry height="60" width="70" x="1450" y="935" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-152" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=11;" value="mesma MLP para as 3 saídas; não vê as outras séries: o acoplamento fica no grafo, onde há equação · 2.908 parâmetros" vertex="1"><mxGeometry height="45" width="640" x="880" y="1005" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-153" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-147" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-148" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-154" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-148" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-149" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-155" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-149" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-150" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-156" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-150" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-151" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-157" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#eef6ec;strokeColor=#82b366;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel E · Cascata física do nível e combinação&lt;/b&gt;" vertex="1"><mxGeometry height="220" width="680" x="860" y="1080" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-158" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Balanço de massa&lt;/b&gt; (integrador)&lt;br&gt;N(t+k) = N(t+k−1) + a·½(q̂&lt;sub&gt;k&lt;/sub&gt; + q̂&lt;sub&gt;k−1&lt;/sub&gt;) + b&lt;br&gt;q̂ = u₄ − ŷ₁, a = 0,00277 m/(l/s)&lt;br&gt;parte do nível medido" vertex="1"><mxGeometry height="110" width="310" x="880" y="1120" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-159" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Combinação por passo&lt;/b&gt;&lt;br&gt;ŷ₂(t+h) = w&lt;sub&gt;h&lt;/sub&gt;·N(t+h) + (1−w&lt;sub&gt;h&lt;/sub&gt;)·ŷ₂&lt;sup&gt;direto&lt;/sup&gt;&lt;br&gt;12 pesos por mínimos quadrados na validação&lt;br&gt;full: 0,93 → 0,70 · pumps: 0,87 → 0,14" vertex="1"><mxGeometry height="110" width="310" x="1210" y="1120" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-160" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=11;" value="&lt;i&gt;perto da origem a cascata integrou pouco erro e domina; com o horizonte, o erro da vazão se acumula e a saída direta ganha peso&lt;/i&gt;" vertex="1"><mxGeometry height="50" width="640" x="880" y="1240" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-161" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-158" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-159" value=""><mxGeometry relative="1" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-162" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#f6eef9;strokeColor=#9673a6;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel F · Função de perda (treino)&lt;/b&gt;" vertex="1"><mxGeometry height="150" width="680" x="860" y="1320" as="geometry"/></mxCell><mxCell id="fiqWIdZ9mZWPgGTb98P2-163" parent="1" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;fontSize=12;" value="ℒ = Σ&lt;sub&gt;i&lt;/sub&gt; [ MSE&lt;sub&gt;i&lt;/sub&gt; / 2σ&lt;sub&gt;i&lt;/sub&gt;² + log σ&lt;sub&gt;i&lt;/sub&gt; ] + λ&lt;sub&gt;c&lt;/sub&gt;·MSE(nível&lt;sup&gt;cascata&lt;/sup&gt;) + ρ·[ α Σ |c&lt;sub&gt;ij,m&lt;/sub&gt;| + (1−α) Σ ‖c&lt;sub&gt;ij,·&lt;/sub&gt;‖ ]&lt;br&gt;&lt;br&gt;pesos por saída aprendidos (3 parâmetros) · cascata na perda: o erro do nível chega à vazão · lasso por grupo: zera bandas e arestas inteiras (ρ = 10⁻³)" vertex="1"><mxGeometry height="105" width="640" x="880" y="1355" as="geometry"/></mxCell></root></mxGraphModel></diagram></mxfile>
+<mxfile host="app.diagrams.net">
+  <diagram name="Arquitetura" id="arq">
+    <mxGraphModel dx="1155" dy="624" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1750" pageHeight="1500" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=18;" value="&lt;b&gt;GOTAS&lt;/b&gt;: grafo de funções de transferência simulado como ARX, com resíduo não linear e nível pela física" vertex="1">
+          <mxGeometry height="40" width="1640" x="40" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="in_lbl" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;" value="&lt;font style=&quot;font-size: 13px;&quot;&gt;Passado medido (168 h)&lt;br&gt;&lt;i&gt;u₁..u₄, y₁..y₃&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="44" width="220" x="120" y="1330" as="geometry" />
+        </mxCell>
+        <mxCell id="fut_lbl" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;" value="Entradas conhecidas (12 h)&lt;br&gt;&lt;i&gt;bombas (+ u₄ no full)&lt;/i&gt;" vertex="1">
+          <mxGeometry height="44" width="220" x="380" y="1330" as="geometry" />
+        </mxCell>
+        <mxCell id="seq" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.5;fontSize=12;" value="&lt;font&gt;&lt;b style=&quot;&quot;&gt;Sequência por nó&lt;/b&gt; s&lt;sub style=&quot;&quot;&gt;j&lt;/sub&gt; ∈ ℝ&lt;sup style=&quot;&quot;&gt;W+H&lt;/sup&gt;, W = 168, H = 12&lt;br&gt;saídas futuras = 0 · nó extra: Σ(u₄ − y₁) das últimas horas&lt;/font&gt;" vertex="1">
+          <mxGeometry height="70" width="420" x="140" y="1230" as="geometry" />
+        </mxCell>
+        <mxCell id="norm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Centralização&lt;/b&gt; s̃&lt;sub&gt;j&lt;/sub&gt; = s&lt;sub&gt;j&lt;/sub&gt; − μ&lt;sub&gt;j&lt;/sub&gt; (μ do passado; sem dividir por σ)" vertex="1">
+          <mxGeometry height="50" width="420" x="140" y="1150" as="geometry" />
+        </mxCell>
+        <mxCell id="loop" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#eaf7f6;strokeColor=#4f9e9a;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;fontSize=12;" value="&lt;b&gt;× 12 passos: simulação recursiva (painel C)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="500" width="480" x="110" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="rfft" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;RFFT&lt;/b&gt; com zero-padding 2(W+H) → S&lt;sub&gt;j&lt;/sub&gt;(f)" vertex="1">
+          <mxGeometry height="46" width="380" x="160" y="1040" as="geometry" />
+        </mxCell>
+        <mxCell id="filt" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Grafo de filtros&lt;/b&gt; (painéis A e B)&lt;br&gt;Y&lt;sub&gt;i&lt;/sub&gt;(f) = Σ&lt;sub&gt;j&lt;/sub&gt; H&lt;sub&gt;ij&lt;/sub&gt;(f) · S&lt;sub&gt;j&lt;/sub&gt;(f)" vertex="1">
+          <mxGeometry height="70" width="380" x="160" y="940" as="geometry" />
+        </mxCell>
+        <mxCell id="irfft" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;iRFFT&lt;/b&gt;, posição W+k → ŷ&lt;sub&gt;i&lt;/sub&gt;(t+k) + b&lt;sub&gt;i&lt;/sub&gt;" vertex="1">
+          <mxGeometry height="46" width="380" x="160" y="860" as="geometry" />
+        </mxCell>
+        <mxCell id="write" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Escreve ŷ(t+k) na sequência&lt;/b&gt;&lt;br&gt;a saída futura k passa a ser a própria previsão" vertex="1">
+          <mxGeometry height="62" width="380" x="160" y="770" as="geometry" />
+        </mxCell>
+        <mxCell id="loop_note" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;" value="&lt;i&gt;equação de 1 passo, iterada:&lt;/i&gt;&lt;br&gt;ŷ&lt;sub&gt;i&lt;/sub&gt;(t) = Σ&lt;sub&gt;j&lt;/sub&gt; Σ&lt;sub&gt;τ&lt;/sub&gt; h&lt;sub&gt;ij&lt;/sub&gt;(τ) s̃&lt;sub&gt;j&lt;/sub&gt;(t−τ) + b&lt;sub&gt;i&lt;/sub&gt;" vertex="1">
+          <mxGeometry height="80" width="380" x="160" y="670" as="geometry" />
+        </mxCell>
+        <mxCell id="resid" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Resíduo não linear&lt;/b&gt; (painel D)&lt;br&gt;passado de y&lt;sub&gt;i&lt;/sub&gt; → Linear(168→16) → tanh → Linear(16→12)&lt;br&gt;iniciado em 0" vertex="1">
+          <mxGeometry height="120" width="210" x="630" y="930" as="geometry" />
+        </mxCell>
+        <mxCell id="plus" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;strokeWidth=1.5;fontSize=18;" value="+" vertex="1">
+          <mxGeometry height="34" width="34" x="333" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="plus_lbl" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;" value="&lt;font style=&quot;font-size: 13px;&quot;&gt;+ μ&lt;sub&gt;i&lt;/sub&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="30" width="70" x="372" y="545" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-3" edge="1" parent="1" source="direct" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;defaultLabelBackgroundColor=page;curved=0;strokeWidth=4;" target="casc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-5" connectable="0" parent="fiqWIdZ9mZWPgGTb98P2-3" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];inheritText=1;defaultLabelBackgroundColor=page;" value="&lt;span style=&quot;background-color: rgb(255, 255, 255);&quot;&gt;ŷ₁&lt;/span&gt;" vertex="1">
+          <mxGeometry relative="1" x="0.0777" y="-2" as="geometry">
+            <mxPoint x="-2" y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="direct" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Saídas diretas&lt;/b&gt; ŷ₁ vazão · ŷ₃ pressão · ŷ₂&lt;sup&gt;direto&lt;/sup&gt; nível" vertex="1">
+          <mxGeometry height="56" width="420" x="140" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-2" edge="1" parent="1" source="casc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;defaultLabelBackgroundColor=page;curved=0;strokeWidth=4;" target="blend">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-6" connectable="0" parent="fiqWIdZ9mZWPgGTb98P2-2" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];inheritText=1;defaultLabelBackgroundColor=page;" value="&lt;font style=&quot;font-size: 13px;&quot;&gt;Cascata&lt;/font&gt;" vertex="1">
+          <mxGeometry relative="1" x="-0.2065" y="-1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="casc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Cascata física&lt;/b&gt; (painel E)&lt;br&gt;balanço de massa com&lt;br&gt;q̂ = u₄ − ŷ₁ → nível&lt;sup&gt;cascata&lt;/sup&gt;&lt;br&gt;&lt;i&gt;u₄ futura (full) ou do dia anterior (pumps)&lt;/i&gt;" vertex="1">
+          <mxGeometry height="116" width="300" x="430" y="299" as="geometry" />
+        </mxCell>
+        <mxCell id="blend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Nível combinado&lt;/b&gt; (painel E)&lt;br&gt;ŷ₂(t+h) = w&lt;sub&gt;h&lt;/sub&gt;·cascata + (1 − w&lt;sub&gt;h&lt;/sub&gt;)·direto" vertex="1">
+          <mxGeometry height="70" width="420" x="140" y="185" as="geometry" />
+        </mxCell>
+        <mxCell id="out_lbl" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=14;" value="&lt;b&gt;Previsão de 12 h&lt;/b&gt;&lt;br&gt;vazão, nível e pressão" vertex="1">
+          <mxGeometry height="60" width="420" x="140" y="77.5" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="seq" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="norm" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="norm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="rfft" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="rfft" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="filt" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="filt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="irfft" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="irfft" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="write" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eloop" edge="1" parent="1" source="write" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="rfft" value="próximo passo k+1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="130" y="801" />
+              <mxPoint x="130" y="1063" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eres_in" edge="1" parent="1" source="norm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=4.5;strokeColor=#333333;fontSize=11;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="resid" value="&lt;font style=&quot;font-size: 13px;&quot;&gt;passado de y&lt;sub style=&quot;&quot;&gt;i&lt;/sub&gt;&lt;/font&gt;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="735" y="1175" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="loop" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="plus" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eres_out" edge="1" parent="1" source="resid" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=4.5;strokeColor=#333333;fontSize=11;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="plus" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="735" y="577" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="plus" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="direct" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="direct" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=4.5;strokeColor=#333333;fontSize=11;" target="blend" value="&lt;font style=&quot;font-size: 13px;&quot;&gt;ŷ₂ direto&lt;/font&gt;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="blend" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=4.5;strokeColor=#333333;fontSize=11;" target="out_lbl" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ein" edge="1" parent="1" source="in_lbl" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;" target="seq" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="efut" edge="1" parent="1" source="fut_lbl" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;" target="seq" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-86" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#fff3e6;strokeColor=#d79b00;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel A · O grafo: 8 nós emissores → 3 saídas, cada aresta é H&lt;sub&gt;ij&lt;/sub&gt;(f)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="300" width="680" x="860" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-87" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" value="u₁ bomba 1" vertex="1">
+          <mxGeometry height="25" width="150" x="880" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-88" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" value="u₂ bomba 2" vertex="1">
+          <mxGeometry height="25" width="150" x="880" y="126" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-89" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" value="u₃ bomba 3" vertex="1">
+          <mxGeometry height="25" width="150" x="880" y="157" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-90" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" value="u₄ vazão entrada" vertex="1">
+          <mxGeometry height="25" width="150" x="880" y="188" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-91" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="y₁ vazão dist." vertex="1">
+          <mxGeometry height="25" width="150" x="880" y="219" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-92" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="y₂ nível" vertex="1">
+          <mxGeometry height="25" width="150" x="880" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-93" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="y₃ pressão" vertex="1">
+          <mxGeometry height="25" width="150" x="880" y="281" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-94" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="Σ(u₄ − y₁)" vertex="1">
+          <mxGeometry height="25" width="150" x="880" y="312" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-95" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="ŷ₁(t+k)" vertex="1">
+          <mxGeometry height="34" width="110" x="1260" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-96" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="ŷ₂(t+k)" vertex="1">
+          <mxGeometry height="34" width="110" x="1260" y="195" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-97" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="ŷ₃(t+k)" vertex="1">
+          <mxGeometry height="34" width="110" x="1260" y="265" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-98" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-87" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-99" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-87" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-100" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-87" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-101" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-88" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-102" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-88" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-103" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-88" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-104" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-89" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-105" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-89" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-106" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-89" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-107" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-90" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-108" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-90" style="html=1;endArrow=classic;endSize=4;strokeColor=#82b366;strokeWidth=2.5;" target="fiqWIdZ9mZWPgGTb98P2-96">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-109" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-90" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-110" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-91" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-111" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-91" style="html=1;endArrow=classic;endSize=4;strokeColor=#82b366;strokeWidth=2.5;" target="fiqWIdZ9mZWPgGTb98P2-96">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-112" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-91" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-113" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-92" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-114" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-92" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-115" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-92" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-116" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-93" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-117" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-93" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-118" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-93" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-119" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-94" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-95">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-120" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-94" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-96">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-121" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-94" style="html=1;endArrow=classic;endSize=4;strokeColor=#e0e0e0;strokeWidth=0.6;" target="fiqWIdZ9mZWPgGTb98P2-97">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-122" parent="1" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;fontSize=11;" value="&lt;b&gt;nó&lt;/b&gt; = série (sequência s&lt;sub&gt;j&lt;/sub&gt;)&lt;br&gt;&lt;br&gt;&lt;b&gt;aresta j → i&lt;/b&gt; = filtro H&lt;sub&gt;ij&lt;/sub&gt;(f)&lt;br&gt;&lt;br&gt;&lt;b&gt;mensagem&lt;/b&gt; = s&lt;sub&gt;j&lt;/sub&gt; filtrado&lt;br&gt;&lt;br&gt;&lt;b&gt;agregação&lt;/b&gt; = Σ&lt;sub&gt;j&lt;/sub&gt;&lt;br&gt;&lt;br&gt;&lt;font color=&#39;#82b366&#39;&gt;&lt;b&gt;verde&lt;/b&gt;&lt;/font&gt;: o balanço de massa (u₄ → nível, y₁ → nível)" vertex="1">
+          <mxGeometry height="250" width="145" x="1385" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-123" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#fff3e6;strokeColor=#d79b00;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel B · Aresta espectral j → i: função de transferência em 8 bandas&lt;/b&gt;" vertex="1">
+          <mxGeometry height="260" width="680" x="860" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-124" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.5;fontSize=12;" value="s̃&lt;sub&gt;j&lt;/sub&gt;(t)&lt;br&gt;W+H amostras" vertex="1">
+          <mxGeometry height="50" width="120" x="880" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-125" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="RFFT&lt;br&gt;n = 2(W+H)" vertex="1">
+          <mxGeometry height="50" width="120" x="1025" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-126" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;strokeWidth=1.5;fontSize=18;" value="×" vertex="1">
+          <mxGeometry height="34" width="34" x="1172" y="428" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-127" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="Σ&lt;sub&gt;j&lt;/sub&gt; sobre&lt;br&gt;emissores" vertex="1">
+          <mxGeometry height="50" width="120" x="1235" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-128" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="iRFFT → ŷ&lt;sub&gt;i&lt;/sub&gt;" vertex="1">
+          <mxGeometry height="50" width="130" x="1385" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-129" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;8 coeficientes complexos&lt;/b&gt; c&lt;sub&gt;ij,m&lt;/sub&gt;&lt;br&gt;centros log-espaçados (m = 0 em DC)&lt;br&gt;3 × 8 × 8 × 2 + 3 = 387 parâmetros" vertex="1">
+          <mxGeometry height="70" width="300" x="880" y="505" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-130" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Interpolação&lt;/b&gt; H&lt;sub&gt;ij&lt;/sub&gt;(f) = Σ&lt;sub&gt;m&lt;/sub&gt; Λ&lt;sub&gt;m&lt;/sub&gt;(f) c&lt;sub&gt;ij,m&lt;/sub&gt;&lt;br&gt;Λ&lt;sub&gt;m&lt;/sub&gt;: chapéus lineares, Σ&lt;sub&gt;m&lt;/sub&gt; Λ&lt;sub&gt;m&lt;/sub&gt;(f) = 1" vertex="1">
+          <mxGeometry height="70" width="310" x="1205" y="505" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-131" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;" value="h&lt;sub&gt;ij&lt;/sub&gt;(τ) = iRFFT(H&lt;sub&gt;ij&lt;/sub&gt;)(τ): o kernel lido da aresta; o zero-padding torna a convolução linear, não circular" vertex="1">
+          <mxGeometry height="45" width="640" x="880" y="585" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-132" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-124" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-125" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-133" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-125" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-126" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-134" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-126" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-127" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-135" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-127" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-128" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-136" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-129" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-130" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-137" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-130" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0.05;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="fiqWIdZ9mZWPgGTb98P2-126" value="H&lt;sub&gt;ij&lt;/sub&gt;(f)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-138" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#eaf7f6;strokeColor=#4f9e9a;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel C · Simulação recursiva de 1 passo (como se simula um ARX)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="210" width="680" x="860" y="660" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-139" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.5;fontSize=12;" value="sequência no passo k:&lt;br&gt;[ passado 168 h | ŷ(t+1..t+k−1) | 0 … ]" vertex="1">
+          <mxGeometry height="62" width="250" x="880" y="705" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-140" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5f0ef;strokeColor=#4f9e9a;strokeWidth=1.5;fontSize=12;" value="filtro de 1 passo&lt;br&gt;na posição W+k" vertex="1">
+          <mxGeometry height="62" width="170" x="1160" y="705" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-141" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="ŷ(t+k)" vertex="1">
+          <mxGeometry height="62" width="160" x="1360" y="705" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-142" parent="1" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;fontSize=11;" value="• auto-arestas H&lt;sub&gt;ii&lt;/sub&gt;: parte autorregressiva (polos); arestas das entradas: parte exógena&lt;br&gt;• entradas conhecidas entram passo a passo; saídas futuras recebem a própria previsão&lt;br&gt;• um filtro aplicado de uma vez dá R² negativo em 12 h; iterado, 0,79" vertex="1">
+          <mxGeometry height="80" width="640" x="880" y="780" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-143" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-139" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-140" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-144" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-140" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-141" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-145" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-141" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="fiqWIdZ9mZWPgGTb98P2-139" value="k ← k+1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1440" y="690" />
+              <mxPoint x="1005" y="690" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-146" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#edf3fc;strokeColor=#6c8ebf;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel D · Resíduo não linear (por saída)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="170" width="680" x="860" y="890" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-147" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.5;fontSize=12;" value="passado centrado&lt;br&gt;de y&lt;sub&gt;i&lt;/sub&gt; (168)" vertex="1">
+          <mxGeometry height="60" width="150" x="880" y="935" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-148" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontSize=12;" value="Linear&lt;br&gt;168 → 16" vertex="1">
+          <mxGeometry height="60" width="120" x="1055" y="935" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-149" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontSize=12;" value="tanh" vertex="1">
+          <mxGeometry height="60" width="80" x="1200" y="935" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-150" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.5;fontSize=12;" value="Linear&lt;br&gt;16 → 12&lt;br&gt;(início = 0)" vertex="1">
+          <mxGeometry height="60" width="120" x="1305" y="935" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-151" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1.5;fontSize=12;" value="r&lt;sub&gt;i&lt;/sub&gt;" vertex="1">
+          <mxGeometry height="60" width="70" x="1450" y="935" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-152" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=11;" value="mesma MLP para as 3 saídas; não vê as outras séries: o acoplamento fica no grafo, onde há equação · 2.908 parâmetros" vertex="1">
+          <mxGeometry height="45" width="640" x="880" y="1005" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-153" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-147" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-148" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-154" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-148" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-149" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-155" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-149" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-150" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-156" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-150" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-151" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-157" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#eef6ec;strokeColor=#82b366;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel E · Cascata física do nível e combinação&lt;/b&gt;" vertex="1">
+          <mxGeometry height="220" width="680" x="860" y="1080" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-158" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Balanço de massa&lt;/b&gt; (integrador)&lt;br&gt;N(t+k) = N(t+k−1) + a·½(q̂&lt;sub&gt;k&lt;/sub&gt; + q̂&lt;sub&gt;k−1&lt;/sub&gt;) + b&lt;br&gt;q̂ = u₄ − ŷ₁, a = 0,00277 m/(l/s)&lt;br&gt;parte do nível medido" vertex="1">
+          <mxGeometry height="110" width="310" x="880" y="1120" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-159" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.5;fontSize=12;" value="&lt;b&gt;Combinação por passo&lt;/b&gt;&lt;br&gt;ŷ₂(t+h) = w&lt;sub&gt;h&lt;/sub&gt;·N(t+h) + (1−w&lt;sub&gt;h&lt;/sub&gt;)·ŷ₂&lt;sup&gt;direto&lt;/sup&gt;&lt;br&gt;12 pesos por mínimos quadrados na validação&lt;br&gt;full: 0,93 → 0,70 · pumps: 0,87 → 0,14" vertex="1">
+          <mxGeometry height="110" width="310" x="1210" y="1120" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-160" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=11;" value="&lt;i&gt;perto da origem a cascata integrou pouco erro e domina; com o horizonte, o erro da vazão se acumula e a saída direta ganha peso&lt;/i&gt;" vertex="1">
+          <mxGeometry height="50" width="640" x="880" y="1240" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-161" edge="1" parent="1" source="fiqWIdZ9mZWPgGTb98P2-158" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#333333;fontSize=11;" target="fiqWIdZ9mZWPgGTb98P2-159" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-162" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=3;fillColor=#f6eef9;strokeColor=#9673a6;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontSize=13;" value="&lt;b&gt;Painel F · Função de perda (treino)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="150" width="680" x="860" y="1320" as="geometry" />
+        </mxCell>
+        <mxCell id="fiqWIdZ9mZWPgGTb98P2-163" parent="1" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;fontSize=12;" value="ℒ = Σ&lt;sub&gt;i&lt;/sub&gt; [ MSE&lt;sub&gt;i&lt;/sub&gt; / 2σ&lt;sub&gt;i&lt;/sub&gt;² + log σ&lt;sub&gt;i&lt;/sub&gt; ] + λ&lt;sub&gt;c&lt;/sub&gt;·MSE(nível&lt;sup&gt;cascata&lt;/sup&gt;) + ρ·[ α Σ |c&lt;sub&gt;ij,m&lt;/sub&gt;| + (1−α) Σ ‖c&lt;sub&gt;ij,·&lt;/sub&gt;‖ ]&lt;br&gt;&lt;br&gt;pesos por saída aprendidos (3 parâmetros) · cascata na perda: o erro do nível chega à vazão · lasso por grupo: zera bandas e arestas inteiras (ρ = 10⁻³)" vertex="1">
+          <mxGeometry height="105" width="640" x="880" y="1355" as="geometry" />
+        </mxCell>
+        <mxCell id="lk_B" edge="1" parent="1" source="filt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#d79b00;strokeWidth=5;endArrow=open;endFill=0;fontSize=11;fontColor=#d79b00;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="fiqWIdZ9mZWPgGTb98P2-123" value="&lt;font style=&quot;font-size: 13px;&quot;&gt;painéis A e B&lt;/font&gt;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="605" y="960" />
+              <mxPoint x="605" y="510" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lk_C" edge="1" parent="1" source="loop" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#4f9e9a;strokeWidth=5;endArrow=open;endFill=0;fontSize=11;fontColor=#4f9e9a;exitX=1;exitY=0.29;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="fiqWIdZ9mZWPgGTb98P2-138" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lk_D" edge="1" parent="1" source="resid" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#6c8ebf;strokeWidth=2;endArrow=open;endFill=0;fontSize=11;fontColor=#6c8ebf;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="fiqWIdZ9mZWPgGTb98P2-146" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lk_E" edge="1" parent="1" source="casc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#82b366;strokeWidth=5;endArrow=open;endFill=0;fontSize=11;fontColor=#82b366;exitX=1;exitY=0.27;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="fiqWIdZ9mZWPgGTb98P2-157" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="850" y="330" />
+              <mxPoint x="850" y="1190" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
