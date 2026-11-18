@@ -1,6 +1,6 @@
 """O modelo final extraído: equação, força de cada aresta e grafo.
 
-Para cada seed do modelo final (`I0_ref`, doc 13), lê o `H_ij(f)` da
+Para cada seed do modelo final (`F5_final`), lê o `H_ij(f)` da
 parte linear e mede, nas janelas de teste:
 
 - a **contribuição** de cada aresta j → i, `Σ_τ h_ij(τ) s̃_j(t − τ)`
@@ -11,10 +11,9 @@ parte linear e mede, nas janelas de teste:
 - os coeficientes `h_ij(τ)` dos primeiros atrasos, em unidades físicas;
 - o desvio padrão do resíduo não linear, para comparar.
 
-Figuras: o grafo aprendido (espessura = força, cor = sinal), as
-respostas ao impulso das arestas mais fortes e os filtros dessas arestas
-no domínio da frequência, `H_ij(f) = Σ_m Λ_m(f) c_ij,m`, com os 8
-coeficientes complexos `c_ij,m` (módulo e fase) em unidades físicas.
+Figuras: o grafo aprendido (espessura = força, cor = sinal) e as respostas
+ao impulso das arestas mais fortes. O resumo traz também os coeficientes
+complexos `c_ij,m` dessas arestas (módulo e fase), em unidades físicas.
 
 Uso (da raiz do repo):
     uv run --extra ml python \
@@ -24,13 +23,19 @@ Uso (da raiz do repo):
 from __future__ import annotations
 
 import json
-import shutil
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from figure_style import COLORS, WIDTH, apply_style, save
 from matplotlib.patches import FancyArrowPatch
-from run_improvements import OUT, SEEDS, config, load_weights
+from run_improvements import (
+    FINAL_VARIANT,
+    OUT,
+    SEEDS,
+    config,
+    load_weights,
+)
 
 from mimo_sys.training.data import (
     FEATURE_COLS,
@@ -45,22 +50,21 @@ from mimo_sys.training.train import (
     target_layout,
 )
 
-VARIANT = "I0_ref"
-FIG = PROJECT_ROOT / "docs" / "figures"
-OVERLEAF = PROJECT_ROOT / "overleaf" / "imagens"
+VARIANT = FINAL_VARIANT
 SUMMARY = PROJECT_ROOT / "outputs" / "extracted_model.json"
-W, H = 168, 12
+H = 12
 SENDERS = [*FEATURE_COLS, "balanco_massa"]
 LABEL = {
-    "freq_b1": "bomba 1",
-    "freq_b2": "bomba 2",
-    "freq_b3": "bomba 3",
-    "vazao_entrada": "vazão\nentrada",
-    "vazao_distribuicao": "vazão\ndistr.",
-    "nivel_res": "nível",
-    "pressao": "pressão",
-    "balanco_massa": "Σ(u₄−y₁)",
+    "freq_b1": "Bomba 1",
+    "freq_b2": "Bomba 2",
+    "freq_b3": "Bomba 3",
+    "vazao_entrada": "Vazão de entrada",
+    "vazao_distribuicao": "Vazão",
+    "nivel_res": "Nível",
+    "pressao": "Pressão",
+    "balanco_massa": r"$\Sigma(u_4-y_1)$",
 }
+SENDER_UNITS = ["Hz", "Hz", "Hz", "l/s", "l/s", "m", "mca", "l/s"]
 OUTPUTS = ["vazao_distribuicao", "nivel_res", "pressao"]
 UNITS = ["l/s", "m", "mca"]
 MIN_SHARE = 0.05  # arestas abaixo de 5% da saída não entram no grafo
@@ -69,7 +73,7 @@ MIN_SHARE = 0.05  # arestas abaixo de 5% da saída não entram no grafo
 def load(scenario: str, seed: int):  # noqa: ANN201
     c = config(VARIANT, scenario, seed)
     layout = target_layout(c)
-    _, windows, _, _ = _windows(c, load_splits())
+    _, windows, _, _ = _windows(c, load_splits(c.data_prefix))
     n_nodes = windows["test"][0].shape[2]
     kwargs = dict(c.model_kwargs)
     kwargs.setdefault("known_future_idx", tuple(known_columns(c)))
@@ -109,8 +113,9 @@ def kernels(m: torch.nn.Module) -> np.ndarray:
     return kern
 
 
-def analyse(scenario: str, seed: int) -> dict:
+def analyse(scenario: str, seed: int) -> dict:  # noqa: PLR0914
     m, pp, (x, _) = load(scenario, seed)
+    W = config(VARIANT, scenario, seed).input_window
     span = np.asarray(pp.scaler.data_range_)
     out_span = span[TARGET_IDX]
     to_phys = out_span[:, None] / span[None, : m.n_nodes]
@@ -134,10 +139,7 @@ def analyse(scenario: str, seed: int) -> dict:
         "resid_std": m._last_residual.numpy().std(axis=(0, 1)) * out_span,
         "lags": lags,
         "ahead": ahead,
-        # Filtro na frequência e coeficientes das bandas, em unidades
-        # físicas (sem o recorte de τ ≤ 0: é o filtro do modelo).
-        "freq_resp": m.frequency_response()[0].detach().numpy()
-        * to_phys[..., None],
+        # Coeficientes das bandas, em unidades físicas.
         "bands": torch.view_as_complex(
             m.response[0].detach().contiguous()
         ).numpy()
@@ -145,7 +147,7 @@ def analyse(scenario: str, seed: int) -> dict:
     }
 
 
-def band_periods(n_fft: int = 2 * (W + H), n_bands: int = 8) -> np.ndarray:
+def band_periods(n_fft: int, n_bands: int) -> np.ndarray:
     """Período (h) do centro de cada banda (`_band_interpolation`)."""
     n_bins = n_fft // 2 + 1
     centres = np.concatenate(
@@ -156,172 +158,67 @@ def band_periods(n_fft: int = 2 * (W + H), n_bands: int = 8) -> np.ndarray:
         return n_fft / centres
 
 
-def filter_figure(
-    fr: np.ndarray, fr_sd: np.ndarray, top: list[tuple[int, int]]
-) -> None:
-    """|H_ij(f)| e fase das arestas mais fortes, contra o período."""
-    n_fft = 2 * (W + H)
-    period = n_fft / np.arange(1, fr.shape[-1])
-    centres = band_periods()[1:]
-    fig, axes = plt.subplots(2, 3, figsize=(12, 6.2))
-    for ax, (i, j) in zip(axes.flat, top, strict=False):
-        mag, sd = np.abs(fr[i, j, 1:]), fr_sd[i, j, 1:]
-        ax.fill_between(period, mag - sd, mag + sd, color="tab:red", alpha=0.2)
-        ax.plot(period, mag, color="tab:red", lw=1.4, label="|H|")
-        ax.set_xscale("log")
-        ax.invert_xaxis()
-        for c in centres:
-            ax.axvline(c, color="#cccccc", lw=0.6, ls=":")
-        for c in (24, 12):
-            ax.axvline(c, color="#777777", lw=0.8, ls="--")
-        ph = ax.twinx()
-        ph.plot(
-            period,
-            np.degrees(np.angle(fr[i, j, 1:])),
-            color="#555555",
-            lw=0.8,
-            ls="-.",
-            label="fase",
-        )
-        ph.set_ylim(-190, 190)
-        ph.set_yticks([-180, -90, 0, 90, 180])
-        ph.tick_params(labelsize=7)
-        unit = f"{UNITS[i]} por unid. de {LABEL[SENDERS[j]]}"
-        ax.set_ylabel(unit.replace("\n", " "), fontsize=7)
-        ax.set_title(
-            f"{LABEL[SENDERS[j]]} → {LABEL[OUTPUTS[i]]}".replace("\n", " "),
-            fontsize=10,
-        )
-        ax.set_xlabel("período (h)  ·  tracejado: 24 h e 12 h")
-    fig.suptitle(
-        "Filtros H_ij(f) das arestas mais fortes: módulo (vermelho, faixa = "
-        "desvio entre 5 treinos) e fase (cinza, eixo à direita)",
-        fontsize=11,
-    )
-    fig.tight_layout()
-    fig.savefig(FIG / "stf_filtros_extraidos.png", dpi=140)
-    plt.close(fig)
-    shutil.copy(
-        FIG / "stf_filtros_extraidos.png",
-        OVERLEAF / "stf_filtros_extraidos.png",
-    )
-
-
-def graph_figure(
-    s: np.ndarray, sign: np.ndarray, resid: np.ndarray, scenario: str
-) -> None:
+def graph_figure(s: np.ndarray, sign: np.ndarray, resid: np.ndarray) -> None:
     """Grafo aprendido: emissores à esquerda, saídas à direita."""
-    fig, ax = plt.subplots(figsize=(12, 8.2))
+    fig, ax = plt.subplots(figsize=(WIDTH, 4.7))
     ax.set_xlim(0, 12)
-    ax.set_ylim(-0.4, 9.0)
+    ax.set_ylim(0, 8.8)
     ax.set_aspect("equal")
     ax.axis("off")
-    ys = np.linspace(8, 0.4, len(SENDERS))
-    pos_s = {j: (1.4, ys[j]) for j in range(len(SENDERS))}
-    pos_t = {0: (9.6, 6.9), 1: (9.6, 4.2), 2: (9.6, 1.5)}
+    ys = np.linspace(8.3, 0.5, len(SENDERS))
+    pos_s = {j: (2.9, ys[j]) for j in range(len(SENDERS))}
+    pos_t = {0: (9.2, 7.0), 1: (9.2, 4.4), 2: (9.2, 1.8)}
     share = s / (s.sum(1, keepdims=True) + resid[:, None])
     for i in range(3):
         for j in range(len(SENDERS)):
             if share[i, j] < MIN_SHARE:
                 continue
-            color = "#b85450" if sign[i, j] > 0 else "#6c8ebf"
+            color = COLORS[2] if sign[i, j] > 0 else COLORS[1]
             ax.add_patch(
                 FancyArrowPatch(
                     pos_s[j],
                     pos_t[i],
                     arrowstyle="-|>",
-                    mutation_scale=14,
-                    lw=0.8 + 20 * share[i, j],
+                    mutation_scale=9,
+                    lw=0.5 + 9 * share[i, j],
                     color=color,
-                    alpha=0.8,
-                    shrinkA=24,
-                    shrinkB=34,
+                    alpha=0.75,
+                    shrinkA=6,
+                    shrinkB=12,
                     connectionstyle="arc3,rad=0.04",
                 )
             )
-            # rótulos de cada saída em x diferente
-            frac = (0.62, 0.48, 0.34)[i]
-            mx = frac * pos_t[i][0] + (1 - frac) * pos_s[j][0]
-            my = frac * pos_t[i][1] + (1 - frac) * pos_s[j][1]
+            frac = (0.68, 0.52, 0.36)[i]
             ax.text(
-                mx,
-                my,
+                frac * pos_t[i][0] + (1 - frac) * pos_s[j][0],
+                frac * pos_t[i][1] + (1 - frac) * pos_s[j][1],
                 f"{100 * share[i, j]:.0f}%",
-                fontsize=8,
                 color=color,
                 ha="center",
                 va="center",
-                bbox=dict(fc="white", ec="none", pad=0.4, alpha=0.8),
+                bbox=dict(fc="white", ec="none", pad=0.3, alpha=0.85),
             )
     for j, name in enumerate(SENDERS):
-        fc = (
-            "#e1d5e7"
-            if name in OUTPUTS
-            else ("#fff2cc" if name == "balanco_massa" else "#f8cecc")
-        )
         ax.add_patch(
-            plt.Circle(pos_s[j], 0.42, fc=fc, ec="#333", lw=1.2, zorder=5)
+            plt.Circle(pos_s[j], 0.14, fc="0.25", ec="none", zorder=5)
         )
         ax.text(
-            *pos_s[j],
+            pos_s[j][0] - 0.3,
+            pos_s[j][1],
             LABEL[name],
-            ha="center",
+            ha="right",
             va="center",
-            fontsize=8,
-            zorder=6,
         )
     for i, name in enumerate(OUTPUTS):
-        ax.add_patch(
-            plt.Circle(
-                pos_t[i], 0.62, fc="#e1d5e7", ec="#333", lw=1.6, zorder=5
-            )
-        )
-        ax.text(
-            *pos_t[i],
-            LABEL[name] + "\n(t+k)",
-            ha="center",
-            va="center",
-            fontsize=9,
-            zorder=6,
-        )
+        ax.add_patch(plt.Circle(pos_t[i], 0.2, fc="0.25", ec="none", zorder=5))
         rs = 100 * resid[i] / (s[i].sum() + resid[i])
         ax.text(
-            pos_t[i][0] + 0.85,
+            pos_t[i][0] + 0.4,
             pos_t[i][1],
-            f"+ resíduo\n{rs:.0f}%",
-            fontsize=8,
+            f"{LABEL[name]}\nresíduo {rs:.0f}%",
             va="center",
-            color="#555",
         )
-    ax.text(
-        1.4,
-        8.6,
-        "emissores (passado + futuro conhecido)",
-        ha="center",
-        fontsize=10,
-        weight="bold",
-    )
-    ax.text(9.6, 8.0, "saídas", ha="center", fontsize=10, weight="bold")
-    ax.text(
-        5.6,
-        -0.3,
-        "espessura e % = parcela da variação da saída explicada pela "
-        "aresta (desvio da contribuição)  ·  vermelho: ganho positivo nas "
-        "3 primeiras horas  ·  azul: negativo  ·  arestas < 5% omitidas",
-        ha="center",
-        fontsize=8,
-        color="#444",
-    )
-    ax.set_title(
-        f"Modelo final extraído ({scenario}): grafo de "
-        "interações aprendido (média de 5 treinos)",
-        fontsize=12,
-    )
-    name = f"stf_grafo_extraido_{scenario}"
-    fig.savefig(FIG / f"{name}.png", dpi=150, bbox_inches="tight")
-    fig.savefig(FIG / f"{name}.pdf", bbox_inches="tight")
-    plt.close(fig)
-    shutil.copy(FIG / f"{name}.pdf", OVERLEAF / f"{name}.pdf")
+    save(fig, "stf_grafo_extraido_full.pdf")
 
 
 def kernel_figure(
@@ -330,42 +227,29 @@ def kernel_figure(
     ahead: np.ndarray,
     top: list[tuple[int, int]],
 ) -> None:
-    fig, axes = plt.subplots(2, 3, figsize=(12, 6))
+    fig, axes = plt.subplots(3, 2, figsize=(WIDTH, 6.4), sharex=True)
     for ax, (i, j) in zip(axes.flat, top, strict=False):
-        tau = np.arange(-12, 25)
+        tau = np.arange(-H, 25)
         h = np.concatenate([ahead[i, j][::-1], lags[i, j]])
-        sd = np.concatenate([np.zeros(12), lags_sd[i, j]])
-        ax.axvspan(-12.5, -0.5, color="#f3f3f3")
-        ax.bar(tau, h, color="tab:red", width=0.7)
+        sd = np.concatenate([np.zeros(H), lags_sd[i, j]])
+        ax.axvspan(-H - 0.5, -0.5, color="0.93")
+        ax.bar(tau, h, color=COLORS[2], width=0.7)
         ax.errorbar(
-            tau[12:], h[12:], yerr=sd[12:], fmt="none", ecolor="#555", lw=0.7
+            tau[H:], h[H:], yerr=sd[H:], fmt="none", ecolor="0.3", lw=0.6
         )
-        ax.axhline(0, color="#999", lw=0.6)
-        unit = f"{UNITS[i]} por unid. de {LABEL[SENDERS[j]]}".replace(
-            "\n", " "
-        )
-        ax.set_title(
-            f"{LABEL[SENDERS[j]]} → {LABEL[OUTPUTS[i]]}".replace("\n", " "),
-            fontsize=10,
-        )
-        ax.set_xlabel("atraso τ (h)  ·  τ < 0: futuro programado")
-        ax.set_ylabel(unit, fontsize=7)
-    fig.suptitle(
-        "Respostas ao impulso h_ij(τ) das arestas mais fortes "
-        "(média de 5 treinos; barras de erro: desvio entre "
-        "treinos)",
-        fontsize=11,
-    )
+        ax.axhline(0, color="0.5", lw=0.6)
+        sender = LABEL[SENDERS[j]]
+        ax.set_title(f"{sender} → {LABEL[OUTPUTS[i]].lower()}", loc="left")
+        ax.set_ylabel(f"{UNITS[i]} por {SENDER_UNITS[j]}")
+    for ax in axes[-1]:
+        ax.set_xlabel(r"Atraso $\tau$ (h)")
+    fig.align_ylabels(axes)
     fig.tight_layout()
-    fig.savefig(FIG / "stf_kernels_extraidos.png", dpi=140)
-    plt.close(fig)
-    shutil.copy(
-        FIG / "stf_kernels_extraidos.png",
-        OVERLEAF / "stf_kernels_extraidos.png",
-    )
+    save(fig, "stf_kernels_extraidos.pdf")
 
 
 def main() -> None:  # noqa: PLR0914 - linear on purpose
+    apply_style()
     summary = {}
     for scenario in ("full", "pumps"):
         runs = [analyse(scenario, s) for s in SEEDS]
@@ -376,7 +260,8 @@ def main() -> None:  # noqa: PLR0914 - linear on purpose
         lags = np.stack([r["lags"] for r in runs])
         ahead = np.stack([r["ahead"] for r in runs]).mean(0)
         s_mean = st.mean(0)
-        graph_figure(s_mean, sign, resid, scenario)
+        if scenario == "full":
+            graph_figure(s_mean, sign, resid)
         share = s_mean / (s_mean.sum(1, keepdims=True) + resid[:, None])
         rows = []
         for i, out in enumerate(OUTPUTS):
@@ -415,10 +300,12 @@ def main() -> None:  # noqa: PLR0914 - linear on purpose
             flat = [(i, j) for i in range(3) for j in range(len(SENDERS))]
             top = sorted(flat, key=lambda ij: -share[ij])[:6]
             kernel_figure(lags.mean(0), lags.std(0), ahead, top)
-            fr = np.stack([r["freq_resp"] for r in runs])
-            filter_figure(fr.mean(0), np.abs(fr).std(0), top)
             bands = np.stack([r["bands"] for r in runs])
-            summary["bandas_periodo_h"] = band_periods().round(1).tolist()
+            cfg = config(VARIANT, scenario, SEEDS[0])
+            periods = band_periods(
+                2 * (cfg.input_window + cfg.output_window), bands.shape[-1]
+            )
+            summary["bandas_periodo_h"] = periods.round(1).tolist()
             summary["filtros_full"] = [
                 {
                     "aresta": f"{SENDERS[j]} -> {OUTPUTS[i]}",

@@ -1,9 +1,9 @@
-"""Grafo por banda e significância das arestas do modelo final (I0_ref).
+"""Grafo por banda e significância das arestas do modelo final.
 
 Duas figuras do modelo final do artigo (cenário `full`):
 
 1. `stf_modelo_band_strength`: força `|c_ij,m|` de cada aresta em cada
-   banda, média dos 5 treinos, em duas linhas de 4 bandas;
+   banda, média dos 5 treinos, um painel por saída;
 2. `stf_modelo_laplace_z`: significância `z = média / dp` do ganho de
    cada aresta nas 3 primeiras horas, em unidades físicas, pela
    aproximação de Laplace dos parâmetros lineares (seed 42), com o
@@ -17,17 +17,23 @@ Uso (da raiz do repo):
 from __future__ import annotations
 
 import json
-import shutil
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from figure_style import (
+    OUTPUT_NAMES,
+    WIDTH,
+    apply_style,
+    panel_letter,
+    save,
+)
 from report_extracted_model import (
-    FIG,
+    LABEL,
     OUTPUTS,
-    OVERLEAF,
     SENDERS,
     VARIANT,
+    band_periods,
     load,
 )
 from run_improvements import SEEDS, config
@@ -57,37 +63,31 @@ def band_strength_figure() -> None:
     strength = np.mean(
         [load(SCENARIO, s)[0].band_strength().numpy() for s in SEEDS], 0
     )  # (saída, emissor, banda)
-    n_bands = strength.shape[-1]
-    cols = (n_bands + 1) // 2
-    fig, axes = plt.subplots(
-        2, cols, figsize=(2.9 * cols, 5.6), sharex=True, sharey=True
+    cfg = config(VARIANT, SCENARIO, SEED)
+    periods = band_periods(
+        2 * (cfg.input_window + cfg.output_window), strength.shape[-1]
     )
+    names = [LABEL[s] for s in SENDERS[: strength.shape[1]]]
+    ticks = ["DC" if np.isinf(p) else f"{p:.0f}" for p in periods]
+    fig, axes = plt.subplots(3, 1, figsize=(WIDTH, 7.2), sharex=True)
     vmax = strength.max()
-    for m, ax in enumerate(axes.flat):
-        ax.imshow(strength[:, :, m], vmin=0, vmax=vmax, cmap="viridis")
-        ax.set_title(f"banda {m}", fontsize=9)
-        ax.set_xticks(range(strength.shape[1]))
-        ax.set_xticklabels(
-            SENDERS[: strength.shape[1]], rotation=90, fontsize=7
+    for k, ax in enumerate(axes):
+        im = ax.imshow(
+            strength[k], vmin=0, vmax=vmax, cmap="viridis", aspect="auto"
         )
-    for ax in axes[:, 0]:
-        ax.set_yticks(range(len(OUTPUTS)))
-        ax.set_yticklabels(OUTPUTS, fontsize=8)
-    fig.suptitle(
-        "Modelo final (full): |c_ij,m| por banda (0 = DC, log-espaçadas; "
-        "média de 5 treinos)"
-    )
+        ax.set_yticks(range(len(names)), names)
+        panel_letter(ax, k)
+    axes[-1].set_xticks(range(len(ticks)), ticks)
+    axes[-1].set_xlabel("Período central da banda (h)")
     fig.tight_layout()
-    name = "stf_modelo_band_strength.png"
-    fig.savefig(FIG / name, dpi=140)
-    plt.close(fig)
-    shutil.copy(FIG / name, OVERLEAF / name)
+    fig.colorbar(im, ax=axes, label=r"$|c_{ij,m}|$", shrink=0.6)
+    save(fig, "stf_modelo_band_strength.pdf")
 
 
 def laplace_figure() -> dict:  # noqa: PLR0914 - linear on purpose
     model, pp, _ = load(SCENARIO, SEED)
     cfg = config(VARIANT, SCENARIO, SEED)
-    _, windows, _, _ = _windows(cfg, load_splits())
+    _, windows, _, _ = _windows(cfg, load_splits(cfg.data_prefix))
     x = torch.as_tensor(windows["train"][0], dtype=torch.float32)
     y = torch.as_tensor(windows["train"][1][..., :3], dtype=torch.float32)
     _, sigma = laplace_linear_posterior(model, x, y)
@@ -117,43 +117,34 @@ def laplace_figure() -> dict:  # noqa: PLR0914 - linear on purpose
                     "z": z[i, j],
                 }
             )
-    fig, ax = plt.subplots(figsize=(8, 3))
+    fig, ax = plt.subplots(figsize=(WIDTH, 2.7))
     im = ax.imshow(
-        np.clip(np.abs(z), 0, Z_MAX), cmap="viridis", vmin=0, vmax=Z_MAX
+        np.clip(np.abs(z), 0, Z_MAX),
+        cmap="viridis",
+        vmin=0,
+        vmax=Z_MAX,
+        aspect="auto",
     )
     for (r, c), v in np.ndenumerate(z):
         ax.text(
             c,
             r,
-            f"{v:+.1f}",
+            f"{v:+.1f}".replace(".", ","),
             ha="center",
             va="center",
-            fontsize=7,
             color="white" if abs(v) < Z_LIGHT else "black",
         )
-    ax.set_xticks(
-        range(model.n_nodes),
-        SENDERS[: model.n_nodes],
-        rotation=45,
-        ha="right",
-        fontsize=8,
-    )
-    ax.set_yticks(range(len(OUTPUTS)), OUTPUTS, fontsize=8)
-    fig.colorbar(im, ax=ax, label=f"|z| (limitado a {Z_MAX})")
-    ax.set_title(
-        "Modelo final (full): significância do ganho de cada "
-        "aresta nas 3 primeiras horas (Laplace)",
-        fontsize=10,
-    )
+    names = [LABEL[s] for s in SENDERS[: model.n_nodes]]
+    ax.set_xticks(range(model.n_nodes), names, rotation=35, ha="right")
+    ax.set_yticks(range(len(OUTPUTS)), OUTPUT_NAMES)
+    fig.colorbar(im, ax=ax, label=f"$|z|$ (limitado a {Z_MAX})")
     fig.tight_layout()
-    name = "stf_modelo_laplace_z.png"
-    fig.savefig(FIG / name, dpi=140)
-    plt.close(fig)
-    shutil.copy(FIG / name, OVERLEAF / name)
+    save(fig, "stf_modelo_laplace_z.pdf")
     return {"arestas": rows, "significativas": int((np.abs(z) > Z_SIG).sum())}
 
 
 if __name__ == "__main__":
+    apply_style()
     band_strength_figure()
     out = laplace_figure()
     SUMMARY.write_text(

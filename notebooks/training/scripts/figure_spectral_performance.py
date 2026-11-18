@@ -1,4 +1,4 @@
-"""Desempenho por frequência do modelo final (I0_ref, cenário `full`).
+"""Desempenho por frequência do modelo final (cenário `full`).
 
 Usa as mesmas previsões da figura da série (`report_lean_model.py`): a
 simulação livre de 12 h encadeada no teste, sem retreinar nada.
@@ -19,19 +19,23 @@ Uso (da raiz do repo):
 from __future__ import annotations
 
 import json
-import shutil
 
 import matplotlib.pyplot as plt
 import numpy as np
+from figure_style import (
+    COLORS,
+    OUTPUT_NAMES,
+    WIDTH,
+    apply_style,
+    save,
+)
 from matplotlib.ticker import FuncFormatter
 from report_lean_model import FIG_SEED, H, seed_preds
-from report_spectral_tf_net import FIG, NAMES
 from run_improvements import SEEDS
 from scipy.signal import welch
 
 from mimo_sys.training.data import PROJECT_ROOT
 
-OVERLEAF = PROJECT_ROOT.parent / "TCC_MIMO_SYS_overleaf" / "imagens"
 SUMMARY = PROJECT_ROOT / "outputs" / "spectral_performance.json"
 SCENARIO = "full"
 UNITS = ["l/s", "m", "mca"]
@@ -39,7 +43,6 @@ NYQUIST = 2  # período mínimo (horas) com amostragem horária
 # Bandas de período (horas), as mesmas da decomposição do artigo.
 BANDS = [(NYQUIST, 4), (4, 8), (8, 16), (16, 32), (32, np.inf)]
 BAND_LABELS = ["2–4", "4–8", "8–16", "16–32", ">32"]
-COLORS = ["tab:blue", "tab:green", "tab:purple"]
 COMMA = FuncFormatter(lambda v, _: f"{v:.2f}".replace(".", ","))
 
 
@@ -69,65 +72,51 @@ def band_r2(t: np.ndarray, p: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def spectrum_figure(t: np.ndarray, p: np.ndarray) -> None:
-    fig, axes = plt.subplots(3, 1, figsize=(4.8, 4.4), sharex=True)
+    fig, axes = plt.subplots(3, 1, figsize=(WIDTH, 5.0), sharex=True)
     for k, ax in enumerate(axes):
         f, st = welch(t[:, k], fs=1, nperseg=len(t) // 2)
         _, sp = welch(p[:, k], fs=1, nperseg=len(t) // 2)
-        ax.loglog(1 / f[1:], st[1:], color="black", lw=1.2, label="medido")
-        ax.loglog(1 / f[1:], sp[1:], color="tab:red", lw=1.2, label="previsto")
+        ax.loglog(1 / f[1:], st[1:], color=COLORS[0], lw=1.1)
+        ax.loglog(1 / f[1:], sp[1:], color=COLORS[2], lw=1.1, ls="--")
         for edge in (4, 8, 16, 32):
-            ax.axvline(edge, color="#cccccc", lw=0.6, zorder=0)
-        ax.set_ylabel(f"{NAMES[k]}\n({UNITS[k]})²·h", fontsize=9)
-        ax.grid(alpha=0.2, which="both")
-    axes[0].legend(fontsize=8, loc="upper right")
+            ax.axvline(edge, color="0.85", lw=0.6, zorder=0)
+        ax.set_ylabel(f"{OUTPUT_NAMES[k]}\n({UNITS[k]})²·h")
     axes[-1].invert_xaxis()
-    axes[-1].set_xticks([2, 4, 8, 16, 32, 64, 128], minor=False)
-    axes[-1].set_xticklabels(["2", "4", "8", "16", "32", "64", "128"])
-    axes[-1].set_xlabel("período (horas)")
+    axes[-1].set_xticks(
+        [2, 4, 8, 16, 32, 64], ["2", "4", "8", "16", "32", "64"]
+    )
+    axes[-1].set_xlabel("Período (horas)")
+    fig.align_ylabels(axes)
     fig.tight_layout()
-    name = f"stf_modelo_espectro_{SCENARIO}.png"
-    fig.savefig(FIG / name, dpi=150)
-    plt.close(fig)
-    shutil.copy(FIG / name, OVERLEAF / name)
+    save(fig, f"stf_modelo_espectro_{SCENARIO}.pdf")
 
 
 def r2_figure(r2: np.ndarray) -> None:
     mean, std = r2.mean(0), r2.std(0)  # (bands, 3)
-    fig, ax = plt.subplots(figsize=(4.8, 4.4))
+    fig, ax = plt.subplots(figsize=(WIDTH, 3.1))
     x = np.arange(len(BANDS))
-    width = 0.26
+    width = 0.27
     for k in range(3):
-        xs = x + (k - 1) * width
         ax.bar(
-            xs,
+            x + (k - 1) * width,
             mean[:, k],
             width,
             yerr=std[:, k],
             capsize=2,
-            color=COLORS[k],
-            label=NAMES[k],
+            color=COLORS[k + 1],
+            error_kw={"lw": 0.7},
         )
-        for xi, v, sd in zip(xs, mean[:, k], std[:, k], strict=True):
-            txt = f"{v:.2f}".replace(".", ",")
-            y_txt = v + sd + 0.02 if v >= 0 else v - sd - 0.02
-            va = "bottom" if v >= 0 else "top"
-            ax.text(xi, y_txt, txt, ha="center", va=va, fontsize=7)
     ax.set_xticks(x, BAND_LABELS)
-    ax.set_xlabel("banda (período em horas)")
-    ax.set_ylabel("R² na banda (teste)")
-    ax.set_ylim(min(0, mean.min() - 0.12), 1.08)
+    ax.set_xlabel("Banda de período (horas)")
+    ax.set_ylabel("R² na banda")
     ax.yaxis.set_major_formatter(COMMA)
     ax.axhline(0, color="black", lw=0.6)
-    ax.grid(alpha=0.2, axis="y")
-    ax.legend(fontsize=8, loc="upper left")
     fig.tight_layout()
-    name = f"stf_modelo_r2_banda_{SCENARIO}.png"
-    fig.savefig(FIG / name, dpi=150)
-    plt.close(fig)
-    shutil.copy(FIG / name, OVERLEAF / name)
+    save(fig, f"stf_modelo_r2_banda_{SCENARIO}.pdf")
 
 
 def main() -> None:
+    apply_style()
     runs = {s: seed_preds(SCENARIO, s) for s in SEEDS}
     truth = chained(runs[FIG_SEED]["true"])
     preds = {s: chained(r["final"]) for s, r in runs.items()}
@@ -145,7 +134,7 @@ def main() -> None:
         "cenario": SCENARIO,
         "horas_teste": len(truth),
         "bandas_h": BAND_LABELS,
-        "saidas": NAMES,
+        "saidas": OUTPUT_NAMES,
         "r2_media": r2.mean(0).round(3).tolist(),
         "r2_desvio": r2.std(0).round(3).tolist(),
         "fracao_variancia": share.round(3).tolist(),

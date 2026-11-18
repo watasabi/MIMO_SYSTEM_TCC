@@ -17,6 +17,7 @@ Uso (da raiz do repo):
     $R tune <modelo> <cenario> <fold> [tentativas]
     $R final <modelo> <cenario> <fold>
     $R report
+    $R export-final
 """
 
 from __future__ import annotations
@@ -566,6 +567,30 @@ def report() -> None:
     (OUT / "report.json").write_text(json.dumps(summary, indent=1))
 
 
+def export_final() -> None:
+    """Grava a melhor configuração do GOTAS no último fold."""
+    keys = (
+        "data_prefix",
+        "input_window",
+        "lr",
+        "weight_decay",
+        "batch_size",
+        "cascade_weight",
+        "message_l1_weight",
+        "model_kwargs",
+    )
+    out = {}
+    for scenario in SCENARIOS:
+        trial = optuna.trial.FixedTrial(
+            study_of("gotas", scenario, N_FOLDS).best_params
+        )
+        base = base_config(trial, scenario, N_FOLDS, TUNE_SEED, False)
+        cfg = neural_config(trial, "gotas", base)
+        out[scenario] = {key: getattr(cfg, key) for key in keys}
+    (OUT / "final_config.json").write_text(json.dumps(out, indent=1))
+    print(json.dumps(out, indent=1))
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     command, *args = sys.argv[1:]
@@ -573,6 +598,8 @@ def main() -> None:
         write_folds()
     elif command == "report":
         report()
+    elif command == "export-final":
+        export_final()
     else:
         os.nice(10)
         memory_guard()

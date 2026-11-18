@@ -19,10 +19,13 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import sys
+from pathlib import Path
 
 import numpy as np
 import torch
+from run_cv_all import OUT as CV_OUT
 from run_decomposition import BASE, SCENARIOS
 from torch import nn
 
@@ -55,7 +58,14 @@ from mimo_sys.training.train import (
     train,
 )
 
-OUT = PROJECT_ROOT / "outputs" / "improvements"
+OUT = Path(
+    os.environ.get(
+        "MIMO_IMPROVEMENTS_OUT", PROJECT_ROOT / "outputs" / "improvements"
+    )
+)
+# Modelo final: melhor configuração do fold 5 de `run_cv_benchmark.py`.
+FINAL_VARIANT = "F5_final"
+FINAL_CONFIG = CV_OUT / "final_config.json"
 RESULTS = OUT / "results.jsonl"
 SEEDS = (42, 43, 44, 45, 46)
 STAT_SEEDS = SEEDS[:3]
@@ -134,6 +144,11 @@ ONLY = {"I4_clean_inflow": ("pumps",)}
 
 
 def config(variant: str, scenario: str, seed: int) -> TrainConfig:
+    extra = (
+        json.loads(FINAL_CONFIG.read_text())[scenario]
+        if variant == FINAL_VARIANT
+        else VARIANTS[variant]
+    )
     return TrainConfig(
         run_name=f"{variant}_{scenario}_s{seed}",
         seed=seed,
@@ -141,7 +156,7 @@ def config(variant: str, scenario: str, seed: int) -> TrainConfig:
             **BASE,
             "experiment": "mimo_sys_improvements",
             **SCENARIOS[scenario],
-            **VARIANTS[variant],
+            **extra,
         },
     )
 
