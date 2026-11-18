@@ -8,13 +8,14 @@ teste nem são carregadas. O teste só é lido por `final`.
 
 Plano: `docs/changes/2026-11-18-validacao-cruzada-temporal.md`.
 
-Uso (da raiz do repo; um processo por vez, pela RAM):
+A rodada completa, em paralelo, é lançada por `run_cv_all.py`.
+
+Uso (da raiz do repo):
     S=notebooks/training/scripts/run_cv_benchmark.py
     R="uv run --extra ml --extra tune --extra boost python $S"
     $R folds
     $R tune <modelo> <cenario> <fold> [tentativas]
     $R final <modelo> <cenario> <fold>
-    $R all [tentativas]
     $R report
 """
 
@@ -24,7 +25,6 @@ import atexit
 import json
 import os
 import shutil
-import subprocess  # noqa: S404
 import sys
 import tempfile
 import threading
@@ -37,8 +37,15 @@ import numpy as np
 import optuna
 import pandas as pd
 import torch
-from catboost import CatBoostRegressor
 from optuna_integration import PyTorchLightningPruningCallback
+from run_cv_all import (
+    FINAL_SEEDS,
+    MODELS,
+    N_FOLDS,
+    N_TRIALS,
+    OUT,
+    pred_path,
+)
 from run_decomposition import BASE, SCENARIOS
 from run_improvements import (
     _blend_weights,  # noqa: PLC2701
@@ -47,7 +54,6 @@ from run_improvements import (
     _split,  # noqa: PLC2701
     evaluate,
 )
-from xgboost import XGBRegressor
 
 from mimo_sys.training.benchmarks import (
     TreeForecaster,
@@ -63,7 +69,6 @@ from mimo_sys.training.data import (
     DATA_PROCESSED,
     FEATURE_COLS,
     INPUT_IDX,
-    PROJECT_ROOT,
     TARGET_IDX,
     load_splits,
 )
@@ -77,14 +82,9 @@ from mimo_sys.training.train import (
 )
 from mimo_sys.training.tuning import MODEL_SPACES
 
-# `MIMO_CV_OUT` separa testes curtos da rodada oficial.
-OUT = Path(os.environ.get("MIMO_CV_OUT", PROJECT_ROOT / "outputs" / "cv"))
 STORAGE = f"sqlite:///{OUT / 'optuna.db'}"
 EXPERIMENT = "mimo_sys_cv"
 H = 12
-N_FOLDS = 5
-N_TRIALS = 30
-FINAL_SEEDS = (42, 43, 44)
 TUNE_SEED = 42
 BOOST_ROUNDS = 600
 BOOST_PATIENCE = 30
@@ -107,20 +107,6 @@ NEURAL = [
     "stemgnn",
     "seq2seq_latent_gnn",
     "fourier_gnn",
-]
-MODELS = [
-    "gotas",
-    "mlp",
-    "lstm",
-    "gru",
-    "xgboost",
-    "catboost",
-    "mpnn",
-    "sgn",
-    "stemgnn",
-    "seq2seq_latent_gnn",
-    "fourier_gnn",
-    "armax",
 ]
 LABELS = {
     "gotas": "GOTAS",
@@ -293,6 +279,8 @@ def fit_booster(
     columns = trial.suggest_float("colsample", 0.3, 1.0)
     l2 = trial.suggest_float("l2", 1e-3, 10.0, log=True)
     if model == "xgboost":
+        from xgboost import XGBRegressor  # noqa: PLC0415 - poupa RAM nas redes
+
         booster = XGBRegressor(
             n_estimators=BOOST_ROUNDS,
             early_stopping_rounds=BOOST_PATIENCE,
@@ -312,6 +300,8 @@ def fit_booster(
         )
         booster.fit(x_train, y_train, eval_set=[(x_val, y_val)], verbose=False)
     else:
+        from catboost import CatBoostRegressor  # noqa: PLC0415
+
         booster = CatBoostRegressor(
             iterations=BOOST_ROUNDS,
             od_type="Iter",
@@ -436,10 +426,6 @@ def tune(model: str, scenario: str, fold: int, n_trials: int) -> None:
     print(study.study_name, study.best_value, study.best_params, flush=True)
 
 
-def pred_path(model: str, scenario: str, fold: int, seed: int) -> Path:
-    return OUT / "preds" / f"{model}_{scenario}_f{fold}_s{seed}.npz"
-
-
 def final(model: str, scenario: str, fold: int) -> None:
     """Melhor configuração do fold, avaliada no teste com 3 sementes."""
     best = study_of(model, scenario, fold).best_params
@@ -455,40 +441,6 @@ def final(model: str, scenario: str, fold: int) -> None:
         )
         np.savez(path, **arrays)
         print("salvo", path.name, flush=True)
-
-
-def run_all(n_trials: int) -> None:
-    """Toda a rodada, um processo por etapa, retomável."""
-    logs = OUT / "logs"
-    logs.mkdir(parents=True, exist_ok=True)
-    for model in MODELS:
-        for scenario in SCENARIOS:
-            for fold in range(1, N_FOLDS + 1):
-                for step in ("tune", "final"):
-                    cmd = [
-                        sys.executable,
-                        __file__,
-                        step,
-                        model,
-                        scenario,
-                        str(fold),
-                    ]
-                    if step == "tune":
-                        cmd.append(str(n_trials))
-                    name = f"{step}_{model}_{scenario}_f{fold}"
-                    began = time.time()
-                    with (logs / f"{name}.log").open("a") as log:
-                        code = subprocess.run(  # noqa: S603
-                            cmd,
-                            stdout=log,
-                            stderr=subprocess.STDOUT,
-                            check=False,
-                        ).returncode
-                    print(
-                        f"{name}: código {code}, "
-                        f"{(time.time() - began) / 60:.1f} min",
-                        flush=True,
-                    )
 
 
 def scores(true: np.ndarray, pred: np.ndarray, fold: int) -> dict:
@@ -619,8 +571,6 @@ def main() -> None:
     command, *args = sys.argv[1:]
     if command == "folds":
         write_folds()
-    elif command == "all":
-        run_all(int(args[0]) if args else N_TRIALS)
     elif command == "report":
         report()
     else:
