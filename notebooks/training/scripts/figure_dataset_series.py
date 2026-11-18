@@ -1,39 +1,54 @@
-"""Figura das sete séries do reservatório.
+"""Figura das sete séries do reservatório, com as divisões usadas.
 
-Gera `dados_series.pdf` para a subseção Materiais do artigo. As linhas
-verticais marcam o início dos blocos de teste da validação cruzada.
+Gera `dados_series.pdf` para a subseção Materiais do artigo: as quatro
+entradas e as três saídas no tempo, com o treino/validação/teste
+(70/15/15) e o recorte do estudo de referência marcados.
 """
 
-from __future__ import annotations
+from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
-from figure_style import COLORS, WIDTH, apply_style, save
+import pandas as pd
 
-from mimo_sys.training.benchmarks import temporal_folds
-from mimo_sys.training.data import FEATURE_COLS, load_splits
+ROOT = Path(__file__).resolve().parents[3]
+OUT = Path.home() / 'code/TCC_MIMO_SYS_overleaf/imagens/dados_series.pdf'
 
-LABELS = {
-    "freq_b1": "$u_1$ (Hz)",
-    "freq_b2": "$u_2$ (Hz)",
-    "freq_b3": "$u_3$ (Hz)",
-    "vazao_entrada": "$u_4$ (l/s)",
-    "vazao_distribuicao": "$y_1$ (l/s)",
-    "nivel_res": "$y_2$ (m)",
-    "pressao": "$y_3$ (mca)",
-}
+data = pd.read_parquet(ROOT / 'data/processed/mimo_data.parquet')
+hours = range(len(data))
 
-apply_style()
-splits = load_splits()
-data = np.concatenate([splits[name] for name in ("train", "val", "test")])
-fig, axes = plt.subplots(len(LABELS), 1, figsize=(WIDTH, 6.6), sharex=True)
-for ax, (col, label) in zip(axes, LABELS.items(), strict=True):
-    ax.plot(data[:, FEATURE_COLS.index(col)], color=COLORS[0], lw=0.55)
-    for fold in temporal_folds(len(data)):
-        ax.axvline(fold.val_end, color=COLORS[2], lw=0.8, ls="--")
-    ax.set_ylabel(label)
-axes[-1].set_xlabel("Hora")
-axes[-1].set_xlim(0, len(data))
-fig.align_ylabels(axes)
+panels: list[tuple[str, str]] = [
+    ('freq_b1', 'bomba 1 $u_1$ (Hz)'),
+    ('freq_b2', 'bomba 2 $u_2$ (Hz)'),
+    ('freq_b3', 'bomba 3 $u_3$ (Hz)'),
+    ('vazao_entrada', 'vazão de\nentrada $u_4$ (l/s)'),
+    ('vazao_distribuicao', 'vazão de\ndistribuição $y_1$ (l/s)'),
+    ('nivel_res', 'nível $y_2$ (m)'),
+    ('pressao', 'pressão $y_3$ (mca)'),
+]
+
+n_train, n_val = 1545, 331
+fig, axes = plt.subplots(len(panels), 1, figsize=(10, 10), sharex=True)
+for ax, (col, ylabel) in zip(axes, panels):
+    ax.plot(hours, data[col], lw=0.6, color='C0')
+    ax.axvspan(n_train, n_train + n_val, color='0.85', zorder=0)
+    ax.axvspan(n_train + n_val, len(data), color='0.7', zorder=0)
+    ax.set_ylabel(ylabel, fontsize=8)
+
+for start, end in [(550, 1150), (1500, 2000)]:
+    axes[0].annotate(
+        '', xy=(end, 1.04), xytext=(start, 1.04),
+        xycoords=('data', 'axes fraction'),
+        arrowprops={'arrowstyle': '<->', 'color': 'k', 'lw': 0.8},
+    )
+axes[0].text(850, 1.08, 'estimação (referência)', ha='center',
+             transform=axes[0].get_xaxis_transform(), fontsize=8)
+axes[0].text(1750, 1.08, 'validação (referência)', ha='center',
+             transform=axes[0].get_xaxis_transform(), fontsize=8)
+axes[-1].text(n_train + n_val / 2, 0.05, 'val.', ha='center',
+              transform=axes[-1].get_xaxis_transform(), fontsize=8)
+axes[-1].text(n_train + n_val * 1.5, 0.05, 'teste', ha='center',
+              transform=axes[-1].get_xaxis_transform(), fontsize=8)
+axes[-1].set_xlabel('hora (27/07/2014 a 27/10/2014)')
 fig.tight_layout()
-save(fig, "dados_series.pdf")
+fig.savefig(OUT)
+print(OUT)
