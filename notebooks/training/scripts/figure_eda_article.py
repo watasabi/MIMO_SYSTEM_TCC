@@ -15,8 +15,7 @@ import numpy as np
 import pandas as pd
 from figure_style import (
     COLORS,
-    LINES,
-    MARKERS,
+    INPUT_NAMES,
     OUTPUT_LABELS,
     OUTPUT_NAMES,
     WIDTH,
@@ -24,6 +23,7 @@ from figure_style import (
     panel_letter,
     save,
 )
+from matplotlib.ticker import FuncFormatter, MaxNLocator
 from scipy import signal
 from statsmodels.tsa.seasonal import STL
 
@@ -41,22 +41,34 @@ BANDS = ["2–4", "4–8", "8–16", "16–32", ">32"]
 WARMUP = 32  # linhas em que o histórico da wavelet ainda é preenchido
 FINAL_TRAIN = "mimo_cv5_f5"
 ARX_ORDER = 2
+COMMA = FuncFormatter(lambda v, _: f"{v:g}".replace(".", ","))
 
 
-def coherence_figure(data: pd.DataFrame, inputs: list[str], name: str) -> None:
-    fig, axes = plt.subplots(3, 1, figsize=(WIDTH, 4.0), sharex=True)
-    for k, (ax, out) in enumerate(zip(axes, OUTPUT_COLS, strict=True)):
-        for i, col in enumerate(inputs):
+def coherence_figure(data: pd.DataFrame) -> None:
+    """Coerência de cada entrada (linhas) com cada saída (colunas)."""
+    fig, axes = plt.subplots(
+        len(INPUT_COLS), 3, figsize=(WIDTH, 6.2), sharex=True, sharey=True
+    )
+    for i, col in enumerate(INPUT_COLS):
+        for k, out in enumerate(OUTPUT_COLS):
             f, cxy = signal.coherence(
                 data[col].to_numpy(), data[out].to_numpy(), fs=1.0, nperseg=256
             )
-            ax.plot(f, cxy, color=COLORS[i], ls=LINES[i])
-        ax.set_ylim(0, 1)
-        ax.set_ylabel(f"Coerência\n{OUTPUT_NAMES[k].lower()}")
-        panel_letter(ax, k)
-    axes[-1].set_xlabel("Frequência (ciclos por hora)")
+            axes[i, k].plot(f, cxy, color=COLORS[1], lw=0.8)
+            axes[i, k].set_ylim(0, 1)
+            axes[i, k].set_yticks([0, 0.5, 1])
+            axes[i, k].set_xticks([0, 0.25, 0.5])
+            axes[i, k].xaxis.set_major_formatter(COMMA)
+            axes[i, k].yaxis.set_major_formatter(COMMA)
+        axes[i, 0].set_ylabel(
+            INPUT_NAMES[i].replace("Vazão de ", "Vazão de\n")
+        )
+    for k, name in enumerate(OUTPUT_NAMES):
+        axes[0, k].set_title(name)
+        axes[-1, k].set_xlabel("Frequência (ciclos/h)")
+    fig.align_ylabels(axes[:, 0])
     fig.tight_layout()
-    save(fig, name)
+    save(fig, "eda_coerencia.pdf")
 
 
 def arx_poles(u: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -68,44 +80,73 @@ def arx_poles(u: np.ndarray, y: np.ndarray) -> np.ndarray:
 
 
 def poles_figure(data: pd.DataFrame) -> None:
-    fig, ax = plt.subplots(figsize=(WIDTH, 2.5))
-    offsets = np.linspace(-0.24, 0.24, len(INPUT_COLS))
+    """Polos no plano z, por par entrada (linha) e saída (coluna)."""
+    theta = np.linspace(0, 2 * np.pi, 200)
+    fig, axes = plt.subplots(
+        len(INPUT_COLS), 3, figsize=(WIDTH, 7.6), sharex=True, sharey=True
+    )
     for i, col in enumerate(INPUT_COLS):
         for k, out in enumerate(OUTPUT_COLS):
+            ax = axes[i, k]
             poles = arx_poles(data[col].to_numpy(), data[out].to_numpy())
-            ax.scatter(
-                k + offsets[i],
-                np.abs(poles).max(),
-                marker=MARKERS[i],
-                color=COLORS[i],
-                s=26,
-                zorder=3,
+            ax.plot(
+                np.cos(theta), np.sin(theta), color="0.45", lw=0.7, ls="--"
             )
-    ax.axhline(1, color="0.45", lw=0.8, ls="--")
-    ax.set_xticks(range(3), OUTPUT_NAMES)
-    ax.set_ylabel("Módulo do polo dominante")
+            ax.axhline(0, color="0.8", lw=0.5)
+            ax.axvline(0, color="0.8", lw=0.5)
+            ax.scatter(poles.real, poles.imag, color=COLORS[2], s=20, zorder=3)
+            for p in poles:
+                ax.annotate(
+                    f"{p.real:.2f}".replace(".", ","),
+                    (p.real, p.imag),
+                    xytext=(0, 6),
+                    textcoords="offset points",
+                    ha="center",
+                )
+            ax.set_xlim(-1.25, 1.25)
+            ax.set_ylim(-1.25, 1.25)
+            ax.set_xticks([-1, 0, 1])
+            ax.set_yticks([-1, 0, 1])
+            ax.set_aspect("equal")
+        axes[i, 0].set_ylabel(
+            INPUT_NAMES[i].replace("Vazão de ", "Vazão de\n")
+        )
+    for k, name in enumerate(OUTPUT_NAMES):
+        axes[0, k].set_title(name)
+        axes[-1, k].set_xlabel("Parte real")
+    fig.align_ylabels(axes[:, 0])
     fig.tight_layout()
     save(fig, "eda_polos_arx.pdf")
 
 
-def stl_figure(data: pd.DataFrame, k: int, name: str) -> None:
-    res = STL(data[OUTPUT_COLS[k]], period=24, robust=True).fit()
-    parts = [
-        ("Medido", res.observed),
-        ("Tendência", res.trend),
-        ("Sazonal", res.seasonal),
-        ("Resíduo", res.resid),
-    ]
-    fig, axes = plt.subplots(4, 1, figsize=(WIDTH, 3.7), sharex=True)
-    for ax, (label, part) in zip(axes, parts, strict=True):
-        ax.plot(part.index, part.to_numpy(), color=COLORS[0], lw=0.7)
-        ax.set_ylabel(label)
-    axes[0].set_ylabel(f"Medido\n{OUTPUT_LABELS[k].split(' ')[-1]}")
-    axes[-1].xaxis.set_major_locator(mdates.MonthLocator())
-    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%d/%m/%Y"))
-    fig.align_ylabels(axes)
-    fig.tight_layout()
-    save(fig, name)
+def stl_figure(data: pd.DataFrame) -> None:
+    """Um grupo por saída, com os componentes na largura toda da página."""
+    rows = ["Medido", "Tendência", "Sazonal", "Resíduo"]
+    fig = plt.figure(figsize=(WIDTH, 8.3))
+    outer = fig.add_gridspec(3, 1, hspace=0.2, left=0.17, right=0.99)
+    shared = None
+    for k, out in enumerate(OUTPUT_COLS):
+        res = STL(data[out], period=24, robust=True).fit()
+        parts = (res.observed, res.trend, res.seasonal, res.resid)
+        inner = outer[k].subgridspec(4, 1, hspace=0.16)
+        for r, (label, part) in enumerate(zip(rows, parts, strict=True)):
+            ax = fig.add_subplot(inner[r], sharex=shared)
+            shared = shared or ax
+            ax.plot(part.index, part.to_numpy(), color=COLORS[0], lw=0.45)
+            ax.set_ylabel(label, rotation=0, ha="right", va="center")
+            ax.yaxis.set_label_coords(-0.075, 0.5)
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=3, prune="both"))
+            ax.yaxis.set_major_formatter(
+                FuncFormatter(lambda v, _: f"{v:g}".replace(".", ","))
+            )
+            ax.tick_params(labelbottom=k == 2 and r == 3)  # noqa: PLR2004
+            if r == 0:
+                ax.set_title(
+                    f"({chr(97 + k)}) {OUTPUT_LABELS[k]}", loc="left", pad=3
+                )
+    shared.xaxis.set_major_locator(mdates.MonthLocator())
+    shared.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m/%Y"))
+    save(fig, "eda_stl_saidas.pdf")
 
 
 def variance_figure() -> None:
@@ -131,11 +172,9 @@ def main() -> None:
     apply_style()
     raw = pd.read_parquet(DATA_PROCESSED / "mimo_data.parquet")[FEATURE_COLS]
     data = raw.interpolate().ffill().bfill()
-    coherence_figure(data, INPUT_COLS[:3], "eda_coerencia_bombas.pdf")
-    coherence_figure(data, INPUT_COLS[3:], "eda_coerencia_entrada.pdf")
+    coherence_figure(data)
     poles_figure(data)
-    for k, name in enumerate(("vazao", "nivel", "pressao")):
-        stl_figure(data, k, f"eda_stl_{name}.pdf")
+    stl_figure(data)
     variance_figure()
 
 
