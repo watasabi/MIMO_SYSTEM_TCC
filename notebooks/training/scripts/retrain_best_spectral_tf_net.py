@@ -76,7 +76,7 @@ def retrain(variant: str) -> dict:
     )
     trial = optuna.trial.FixedTrial(study.best_params)
     base = base_config(variant)
-    cfg = suggest_config(trial, "spectral_tf_net", base)
+    cfg = suggest_config(trial, "gotas", base)
     cfg = dataclasses.replace(
         cfg,
         save=True,

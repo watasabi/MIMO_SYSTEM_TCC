@@ -22,10 +22,10 @@ Which model serves which extraction route is documented in
 """
 
 from mimo_sys.architectures.fourier_gnn import FourierGNN
+from mimo_sys.architectures.gotas import GOTAS
 from mimo_sys.architectures.linear_edge_net import LinearEdgeNet
 from mimo_sys.architectures.mpnn import MPNNForecaster
 from mimo_sys.architectures.seq2seq_latent_gnn import Seq2SeqLatentGNN
-from mimo_sys.architectures.spectral_tf_net import SpectralTFNet
 from mimo_sys.architectures.stemgnn import StemGNN
 from mimo_sys.architectures.symbolic_graph_network import (
     SymbolicGraphNetwork,
@@ -36,7 +36,7 @@ __all__ = [
     "LinearEdgeNet",
     "MPNNForecaster",
     "Seq2SeqLatentGNN",
-    "SpectralTFNet",
+    "GOTAS",
     "StemGNN",
     "SymbolicGraphNetwork",
 ]

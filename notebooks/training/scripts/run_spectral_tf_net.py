@@ -42,7 +42,7 @@ BATCHES = (32, 128, 512)
 VAZAO, NIVEL = 0, 1
 
 COMMON = dict(
-    model="spectral_tf_net",
+    model="gotas",
     output_window=OUTPUT_WINDOW,
     future_exog=True,
     mass_balance_feature=True,

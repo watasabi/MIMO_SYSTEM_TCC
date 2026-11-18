@@ -59,7 +59,7 @@ FULL_TOLERANCE = -0.005
 
 # Doc 8's reference model: SpectralTFNet + residual, 168h in, 12h out.
 BASE = dict(
-    model="spectral_tf_net",
+    model="gotas",
     input_window=168,
     output_window=12,
     batch_size=128,

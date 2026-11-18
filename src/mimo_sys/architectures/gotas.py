@@ -46,7 +46,7 @@ import math
 import torch
 from torch import nn
 
-__all__ = ["SpectralTFNet"]
+__all__ = ["GOTAS"]
 
 # freq_b1..3, vazao_entrada in `training.data.FEATURE_COLS` order.
 DEFAULT_KNOWN_FUTURE = (0, 1, 2, 3)
@@ -82,7 +82,7 @@ def _band_interpolation(n_bins: int, n_bands: int) -> torch.Tensor:
     return weights
 
 
-class SpectralTFNet(nn.Module):
+class GOTAS(nn.Module):
     """Graph of learned frequency responses between all series.
 
     Args:

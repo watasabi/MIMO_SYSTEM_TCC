@@ -212,7 +212,7 @@ def _quick_config(name: str):
     from mimo_sys.training.train import TrainConfig  # noqa: PLC0415
 
     return TrainConfig(
-        model="spectral_tf_net",
+        model="gotas",
         model_kwargs={"n_bands": 4, "residual_hidden": 8},
         input_window=48,
         output_window=12,

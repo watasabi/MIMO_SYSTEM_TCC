@@ -43,11 +43,11 @@ from sklearn.preprocessing import MinMaxScaler
 from torch import nn
 
 from mimo_sys.architectures import (
+    GOTAS,
     FourierGNN,
     LinearEdgeNet,
     MPNNForecaster,
     Seq2SeqLatentGNN,
-    SpectralTFNet,
     StemGNN,
     SymbolicGraphNetwork,
 )
@@ -118,7 +118,7 @@ ARCHITECTURES: dict[str, type[nn.Module]] = {
     "seq2seq_latent_gnn": Seq2SeqLatentGNN,
     "fourier_gnn": FourierGNN,
     "linear_edge_net": LinearEdgeNet,
-    "spectral_tf_net": SpectralTFNet,
+    "gotas": GOTAS,
 }
 
 Decomposition = Literal["atrous", "ewt", "seasonal24"]
@@ -600,7 +600,7 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
     ):
         raise ValueError("seasonal24 needs future_exog and horizon <= 24")
     model_kwargs = dict(cfg.model_kwargs)
-    if cfg.model == "spectral_tf_net" and cfg.future_exog:
+    if cfg.model == "gotas" and cfg.future_exog:
         # The model's horizon mask must match the columns actually
         # known: a default of all 4 inputs would read the zeroed
         # `vazao_entrada` of the `pumps` scenario as if it were real.

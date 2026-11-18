@@ -38,7 +38,7 @@ VARIANTS: dict[str, tuple[str, ...]] = {
 
 def base_config(variant: str) -> TrainConfig:
     return TrainConfig(
-        model="spectral_tf_net",
+        model="gotas",
         output_window=OUTPUT_WINDOW,
         future_exog=True,
         future_known=VARIANTS[variant],
@@ -61,7 +61,7 @@ def main(variant: str, n_trials: int) -> None:
     storage = f"sqlite:///{STORAGE_DIR / 'optuna_spectral_tf_net_r2.db'}"
     study_name = f"tune_spectral_tf_net_{variant}_r2"
     study = tune(
-        model="spectral_tf_net",
+        model="gotas",
         n_trials=n_trials,
         base=base_config(variant),
         study_name=study_name,

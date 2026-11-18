@@ -11,11 +11,11 @@ import pytest
 import torch
 
 from mimo_sys.architectures import (
+    GOTAS,
     FourierGNN,
     LinearEdgeNet,
     MPNNForecaster,
     Seq2SeqLatentGNN,
-    SpectralTFNet,
     StemGNN,
     SymbolicGraphNetwork,
 )
@@ -55,7 +55,7 @@ def build(name: str, **overrides: int) -> torch.nn.Module:
         "sgn": SymbolicGraphNetwork,
         "fourier_gnn": FourierGNN,
         "linear_edge_net": LinearEdgeNet,
-        "spectral_tf_net": SpectralTFNet,
+        "gotas": GOTAS,
     }
     return builders[name](**kwargs)
 
@@ -76,7 +76,7 @@ def window() -> torch.Tensor:
         "sgn",
         "fourier_gnn",
         "linear_edge_net",
-        "spectral_tf_net",
+        "gotas",
     ],
 )
 def test_output_shape(name: str, window: torch.Tensor) -> None:
@@ -96,7 +96,7 @@ def test_output_shape(name: str, window: torch.Tensor) -> None:
         "sgn",
         "fourier_gnn",
         "linear_edge_net",
-        "spectral_tf_net",
+        "gotas",
     ],
 )
 def test_seed_determinism(name: str, window: torch.Tensor) -> None:
@@ -295,7 +295,7 @@ def test_sgn_rejects_negative_noise_scale() -> None:
         "sgn",
         "fourier_gnn",
         "linear_edge_net",
-        "spectral_tf_net",
+        "gotas",
     ],
 )
 def test_backward_reaches_every_parameter(
@@ -442,41 +442,41 @@ def test_linear_edge_net_nonlinearity_share_sobe_com_residuo_dominante(
     assert model.nonlinearity_share() > RESIDUAL_DOMINATED_SHARE
 
 
-# --------------------------------------------------------- SpectralTFNet
+# --------------------------------------------------------- GOTAS
 
 PAST = INPUT_WINDOW - OUTPUT_WINDOW  # x = past + known future horizon
 KNOWN_FUTURE = [0, 1, 2, 3]
 
 
-def test_spectral_tf_net_ignora_alvos_futuros(window: torch.Tensor) -> None:
+def test_gotas_ignora_alvos_futuros(window: torch.Tensor) -> None:
     """Valores das saídas no trecho futuro de `x` não mudam a previsão
     (por contrato vêm zerados, mas o modelo também os mascara)."""
     torch.manual_seed(SEED)
-    model = build("spectral_tf_net").eval()
+    model = build("gotas").eval()
     tampered = window.clone()
     tampered[:, PAST:, TARGET_IDX] = 100.0
     torch.testing.assert_close(model(window), model(tampered))
 
 
-def test_spectral_tf_net_usa_entradas_futuras(window: torch.Tensor) -> None:
+def test_gotas_usa_entradas_futuras(window: torch.Tensor) -> None:
     torch.manual_seed(SEED)
-    model = build("spectral_tf_net").eval()
+    model = build("gotas").eval()
     tampered = window.clone()
     tampered[:, PAST:, KNOWN_FUTURE] += 1.0
     assert not torch.allclose(model(window), model(tampered))
 
 
-def test_spectral_tf_net_sem_futuro_no_input(window: torch.Tensor) -> None:
+def test_gotas_sem_futuro_no_input(window: torch.Tensor) -> None:
     """`future_in_input=False`: `x` é só o passado, horizonte zerado."""
     torch.manual_seed(SEED)
-    model = build("spectral_tf_net", future_in_input=False).eval()
+    model = build("gotas", future_in_input=False).eval()
     out = model(window)
     assert out.shape == (BATCH, OUTPUT_WINDOW, len(TARGET_IDX))
 
 
-def test_spectral_tf_net_impulse_response_e_irfft_da_resposta() -> None:
+def test_gotas_impulse_response_e_irfft_da_resposta() -> None:
     torch.manual_seed(SEED)
-    model = build("spectral_tf_net")
+    model = build("gotas")
     h = model.impulse_response(1, 3)
     expected = torch.fft.irfft(
         model.frequency_response()[0, 1, 3].detach(), n=model.n_fft
@@ -484,22 +484,22 @@ def test_spectral_tf_net_impulse_response_e_irfft_da_resposta() -> None:
     torch.testing.assert_close(h, expected)
 
 
-def test_spectral_tf_net_gate_de_regime_soma_um(window: torch.Tensor) -> None:
+def test_gotas_gate_de_regime_soma_um(window: torch.Tensor) -> None:
     torch.manual_seed(SEED)
-    model = build("spectral_tf_net", n_regimes=3)
+    model = build("gotas", n_regimes=3)
     weights = model.regime_weights(window)
     assert weights.shape == (BATCH, 3)
     torch.testing.assert_close(weights.sum(dim=1), torch.ones(BATCH))
 
 
-def test_spectral_tf_net_residuo_comeca_zerado(window: torch.Tensor) -> None:
+def test_gotas_residuo_comeca_zerado(window: torch.Tensor) -> None:
     torch.manual_seed(SEED)
-    model = build("spectral_tf_net", residual_hidden=8).eval()
+    model = build("gotas", residual_hidden=8).eval()
     model(window)
     assert model.nonlinearity_share() == 0.0
 
 
-def test_spectral_tf_net_parte_linear_nao_inclui_o_residuo(
+def test_gotas_parte_linear_nao_inclui_o_residuo(
     window: torch.Tensor,
 ) -> None:
     """`_last_linear` é a saída sem o resíduo, mesmo com resíduo ativo.
@@ -510,7 +510,7 @@ def test_spectral_tf_net_parte_linear_nao_inclui_o_residuo(
     import copy  # noqa: PLC0415
 
     torch.manual_seed(SEED)
-    model = build("spectral_tf_net", residual_hidden=8).eval()
+    model = build("gotas", residual_hidden=8).eval()
     torch.nn.init.normal_(model.residual[-1].weight)
     linear_only = copy.deepcopy(model)
     linear_only.residual = None
@@ -525,10 +525,10 @@ def test_spectral_tf_net_parte_linear_nao_inclui_o_residuo(
     )
 
 
-def test_spectral_tf_net_group_l1_mata_aresta_de_ruido() -> None:
+def test_gotas_group_l1_mata_aresta_de_ruido() -> None:
     """Com o lasso por grupo, a aresta de um nó sem informação encolhe."""
     torch.manual_seed(SEED)
-    model = build("spectral_tf_net")
+    model = build("gotas")
     opt = torch.optim.Adam(model.parameters(), lr=0.05)
     n = 64
     x = torch.randn(n, INPUT_WINDOW, N_NODES)

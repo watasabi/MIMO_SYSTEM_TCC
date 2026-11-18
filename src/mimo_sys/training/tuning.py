@@ -50,7 +50,7 @@ MODEL_SPACES: dict[str, Space] = {
         "top_k": t.suggest_int("top_k", 2, 6),
         "k_high": t.suggest_int("k_high", 4, 12),
     },
-    "spectral_tf_net": lambda t: {
+    "gotas": lambda t: {
         "n_bands": t.suggest_int("n_bands", 2, 24),
         "n_regimes": t.suggest_int("n_regimes", 1, 4),
         "residual_hidden": t.suggest_categorical(
@@ -90,7 +90,7 @@ def suggest_config(
         ),
         ema_decay=trial.suggest_categorical("ema_decay", [None, 0.999]),
     )
-    if model == "spectral_tf_net":
+    if model == "gotas":
         cfg = replace(
             cfg,
             input_window=trial.suggest_int("input_window", 24, 336),

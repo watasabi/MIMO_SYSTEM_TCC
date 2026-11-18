@@ -917,13 +917,13 @@ def test_with_future_exog_zera_tudo_que_nao_e_entrada() -> None:
     assert (tail[..., others] == 0).all()
 
 
-def test_train_spectral_tf_net_com_futuro_e_cascata(mlflow_tmp: None) -> None:
+def test_train_gotas_com_futuro_e_cascata(mlflow_tmp: None) -> None:
     from mimo_sys.training import TrainConfig, train  # noqa: PLC0415
     from mimo_sys.training.data import N_TARGETS  # noqa: PLC0415
 
     result = train(
         TrainConfig(
-            model="spectral_tf_net",
+            model="gotas",
             model_kwargs={"n_bands": 6, "n_regimes": 2},
             future_exog=True,
             mass_balance_feature=True,
@@ -961,7 +961,7 @@ def test_train_so_bombas_no_futuro_com_cascata(mlflow_tmp: None) -> None:
 
     result = train(
         TrainConfig(
-            model="spectral_tf_net",
+            model="gotas",
             model_kwargs={"n_bands": 6, "known_future_idx": (0, 1, 2)},
             future_exog=True,
             future_known=("freq_b1", "freq_b2", "freq_b3"),
@@ -976,12 +976,12 @@ def test_train_so_bombas_no_futuro_com_cascata(mlflow_tmp: None) -> None:
     assert result.module.hparams.cascade_inflow_known is False
 
 
-def test_spectral_tf_net_backcast_reconstroi_o_proprio_passado() -> None:
-    from mimo_sys.architectures import SpectralTFNet  # noqa: PLC0415
+def test_gotas_backcast_reconstroi_o_proprio_passado() -> None:
+    from mimo_sys.architectures import GOTAS  # noqa: PLC0415
 
     input_window, output_window, n_nodes = 20, 4, 3
     target_idx = [1, 2]
-    model = SpectralTFNet(
+    model = GOTAS(
         n_nodes=n_nodes,
         input_window=input_window,
         output_window=output_window,

@@ -11,10 +11,10 @@ import torchmetrics
 from torch import nn
 
 from mimo_sys.architectures import (
+    GOTAS,
     LinearEdgeNet,
     MPNNForecaster,
     Seq2SeqLatentGNN,
-    SpectralTFNet,
     StemGNN,
     SymbolicGraphNetwork,
 )
@@ -107,8 +107,8 @@ class Forecaster(L.LightningModule):
             (Cranmer et al. use 1e-2; 0 disables).
         backcast_weight: Weight of the model's `backcast_loss`
             (`StemGNN`'s backcast head gets no gradient without it;
-            `SpectralTFNet`'s is an auxiliary auto-consistency term,
-            see `SpectralTFNet.backcast_loss`).
+            `GOTAS`'s is an auxiliary auto-consistency term,
+            see `GOTAS.backcast_loss`).
         teacher_forcing_ratio: Seq2SeqLatentGNN teacher forcing in
             training.
         uncertainty_weighted: Combine per-output losses with
@@ -270,11 +270,11 @@ class Forecaster(L.LightningModule):
         ):
             aux += hp.message_l1_weight * core.message_l1()
         if hp.message_l1_weight > 0 and isinstance(
-            core, (LinearEdgeNet, SpectralTFNet)
+            core, (LinearEdgeNet, GOTAS)
         ):
             aux += hp.message_l1_weight * core.group_l1()
         if hp.backcast_weight > 0 and isinstance(
-            core, (StemGNN, SpectralTFNet)
+            core, (StemGNN, GOTAS)
         ):
             aux += hp.backcast_weight * core.backcast_loss(seen)
         return aux

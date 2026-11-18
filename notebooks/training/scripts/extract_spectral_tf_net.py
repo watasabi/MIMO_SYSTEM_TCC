@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from mimo_sys.architectures import SpectralTFNet
+from mimo_sys.architectures import GOTAS
 from mimo_sys.training import TrainConfig, fit_mass_balance, train
 from mimo_sys.training.data import (
     FEATURE_COLS,
@@ -31,7 +31,7 @@ MAX_LAG = 48
 SENDERS = [*FEATURE_COLS, "balanco_massa"]
 
 CFG = TrainConfig(
-    model="spectral_tf_net",
+    model="gotas",
     model_kwargs=dict(n_bands=8, n_regimes=1),
     input_window=168,
     output_window=12,
@@ -52,9 +52,9 @@ CFG = TrainConfig(
 )
 
 
-def core_of(model: torch.nn.Module) -> SpectralTFNet:
+def core_of(model: torch.nn.Module) -> GOTAS:
     """Peel training wrappers down to the SpectralTFNet."""
-    while not isinstance(model, SpectralTFNet):
+    while not isinstance(model, GOTAS):
         model = model.model
     return model
 

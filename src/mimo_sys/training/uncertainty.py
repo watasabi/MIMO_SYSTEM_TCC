@@ -3,7 +3,7 @@
 Two independent pieces (`docs/12_incerteza-e-explicabilidade.md`):
 
 - **Laplace posterior of the linear transfer functions** of a
-  `SpectralTFNet` (generalised Gauss-Newton on the 12-step recursive
+  `GOTAS` (generalised Gauss-Newton on the 12-step recursive
   simulation, the same output the model is trained on), giving a
   credible interval for any coefficient read off the equation (an edge's
   static gain, the mass-balance taps);
@@ -44,7 +44,7 @@ def laplace_linear_posterior(
     residual (the interpretable, linear-only model).
 
     Args:
-        model: Trained `SpectralTFNet`, eval mode, residual disabled.
+        model: Trained `GOTAS`, eval mode, residual disabled.
         x: `(n, seq_len, n_nodes)` training windows.
         y: `(n, horizon, n_targets)` their targets.
         prior_precision: `lambda`.
@@ -123,7 +123,7 @@ def coefficient_ci(
 def impulse_response_graph(
     model: nn.Module, i: int, j: int, regime: int = 0
 ) -> torch.Tensor:
-    """`SpectralTFNet.impulse_response` without `no_grad` (for gradients)."""
+    """`GOTAS.impulse_response` without `no_grad` (for gradients)."""
     bands = torch.view_as_complex(model.response.contiguous())
     h = bands[regime, i, j] @ model.interp.T.to(bands.dtype)
     return torch.fft.irfft(h, n=model.n_fft)

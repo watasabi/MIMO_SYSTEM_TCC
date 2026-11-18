@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from mimo_sys.architectures import SpectralTFNet
+from mimo_sys.architectures import GOTAS
 from mimo_sys.training.uncertainty import (
     coefficient_ci,
     conformal_quantile,
@@ -37,9 +37,9 @@ def test_log_sigma_recupera_heterocedasticidade() -> None:
     np.testing.assert_allclose(beta, [0.5, 1.5], atol=0.1)
 
 
-def _small_model() -> SpectralTFNet:
+def _small_model() -> GOTAS:
     torch.manual_seed(0)
-    return SpectralTFNet(
+    return GOTAS(
         n_nodes=3,
         input_window=30,
         output_window=4,
