@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from run_cv_all import (
     MODELS,
@@ -32,7 +32,9 @@ def main() -> None:
     recent = 0
     if db.exists():
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
-        since = datetime.now() - timedelta(minutes=RECENT_MINUTES)
+        # O Optuna grava os horários em UTC, sem fuso.
+        now = datetime.now(UTC).replace(tzinfo=None)
+        since = now - timedelta(minutes=RECENT_MINUTES)
         rows = con.execute(
             "SELECT s.study_name, t.datetime_complete FROM trials t "
             "JOIN studies s ON s.study_id = t.study_id "
@@ -62,7 +64,7 @@ def main() -> None:
     print(f"Ritmo nos últimos {RECENT_MINUTES} min: {rate:.1f} tentativas/min")
     if rate > 0:
         hours = (total - done_trials) / rate / 60
-        print(f"Tempo restante aproximado: {hours:.1f} h")
+        print(f"Tempo restante neste ritmo: {hours:.1f} h")
     print(f"Memória disponível: {available_mb() / 1024:.1f} GB")
 
 
