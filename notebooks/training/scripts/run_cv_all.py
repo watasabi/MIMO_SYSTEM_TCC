@@ -12,6 +12,7 @@ Uso (da raiz do repo):
 
 from __future__ import annotations
 
+import fcntl
 import os
 import subprocess  # noqa: S404
 import sys
@@ -111,6 +112,12 @@ def main() -> None:
     workers = int(sys.argv[1]) if len(sys.argv) > 1 else WORKERS
     n_trials = int(sys.argv[2]) if len(sys.argv) > 2 else N_TRIALS  # noqa: PLR2004
     (OUT / "logs").mkdir(parents=True, exist_ok=True)
+    # Duas rodadas ao mesmo tempo esgotariam a memória da máquina.
+    lock = (OUT / "run.lock").open("w", encoding="utf-8")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        raise SystemExit("Já existe uma rodada em andamento.") from None
     jobs = [
         (model, scenario, fold)
         for model in MODELS
