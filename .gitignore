@@ -23,6 +23,7 @@ notebooks/**/checkpoints/
 
 # PySR search logs (symbolic regression scratch dir)
 outputs/
+data/processed/mimo_cv5_*
 
 # IDE
 .vscode/

@@ -21,6 +21,11 @@ Which model serves which extraction route is documented in
 `docs/3_investigacao-arquiteturas.md`.
 """
 
+from mimo_sys.architectures.baselines import (
+    GRUForecaster,
+    LSTMForecaster,
+    MLPForecaster,
+)
 from mimo_sys.architectures.fourier_gnn import FourierGNN
 from mimo_sys.architectures.gotas import GOTAS
 from mimo_sys.architectures.linear_edge_net import LinearEdgeNet
@@ -33,7 +38,10 @@ from mimo_sys.architectures.symbolic_graph_network import (
 
 __all__ = [
     "FourierGNN",
+    "GRUForecaster",
+    "LSTMForecaster",
     "LinearEdgeNet",
+    "MLPForecaster",
     "MPNNForecaster",
     "Seq2SeqLatentGNN",
     "GOTAS",

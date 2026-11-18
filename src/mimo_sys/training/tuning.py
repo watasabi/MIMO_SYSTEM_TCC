@@ -28,14 +28,36 @@ Space = Callable[[optuna.Trial], dict[str, Any]]
 PUMP_COLS = tuple(c for c in INPUT_COLS if c != "vazao_entrada")
 
 MODEL_SPACES: dict[str, Space] = {
+    "mlp": lambda t: {
+        "hidden_size": t.suggest_categorical(
+            "hidden_size", [64, 128, 256, 512]
+        ),
+        "n_layers": t.suggest_int("n_layers", 1, 3),
+        "dropout": t.suggest_float("dropout", 0.0, 0.3),
+    },
+    "lstm": lambda t: {
+        "hidden_size": t.suggest_categorical("hidden_size", [32, 64, 128]),
+        "num_layers": t.suggest_int("num_layers", 1, 2),
+        "dropout": t.suggest_float("dropout", 0.0, 0.3),
+    },
+    "gru": lambda t: {
+        "hidden_size": t.suggest_categorical("hidden_size", [32, 64, 128]),
+        "num_layers": t.suggest_int("num_layers", 1, 2),
+        "dropout": t.suggest_float("dropout", 0.0, 0.3),
+    },
+    "fourier_gnn": lambda t: {
+        "embed_dim": t.suggest_categorical("embed_dim", [16, 32, 64]),
+        "n_layers": t.suggest_int("n_layers", 1, 4),
+        "ffn_hidden": t.suggest_categorical("ffn_hidden", [32, 64, 128]),
+    },
     "mpnn": lambda t: {
         "hidden_size": t.suggest_categorical("hidden_size", [32, 64, 128]),
-        "message_dim": t.suggest_int("message_dim", 1, 4),
+        "message_dim": t.suggest_categorical("message_dim", [2, 4, 8, 16]),
         "n_layers": t.suggest_int("n_layers", 1, 2),
     },
     "sgn": lambda t: {
         "hidden_size": t.suggest_categorical("hidden_size", [32, 64, 128]),
-        "message_dim": t.suggest_int("message_dim", 1, 4),
+        "message_dim": t.suggest_categorical("message_dim", [2, 4, 8, 16]),
         "n_layers": t.suggest_int("n_layers", 1, 2),
         "noise_scale": t.suggest_float("noise_scale", 0.0, 2.0),
     },

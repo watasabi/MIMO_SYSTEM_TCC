@@ -203,14 +203,18 @@ def _segments(cfg: TrainConfig) -> tuple[dict, np.ndarray]:
 
 
 def evaluate(
-    cfg: TrainConfig, model: nn.Module, pp: object
+    cfg: TrainConfig,
+    model: nn.Module,
+    pp: object,
+    splits: tuple[str, ...] = ("val", "test"),
 ) -> dict[str, np.ndarray]:
-    """Every-hour forecasts of val and test, production contract."""
+    """Every-hour forecasts of `splits`, production contract."""
     segs, train_raw = _segments(cfg)
     layout = target_layout(cfg)
     h = cfg.output_window
     out = {}
-    for name, seg in segs.items():
+    for name in splits:
+        seg = segs[name]
         origins = np.arange(cfg.input_window, len(seg) - h + 1)
         pred = forecast_origins(
             model,

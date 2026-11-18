@@ -45,7 +45,10 @@ from torch import nn
 from mimo_sys.architectures import (
     GOTAS,
     FourierGNN,
+    GRUForecaster,
     LinearEdgeNet,
+    LSTMForecaster,
+    MLPForecaster,
     MPNNForecaster,
     Seq2SeqLatentGNN,
     StemGNN,
@@ -119,6 +122,9 @@ ARCHITECTURES: dict[str, type[nn.Module]] = {
     "fourier_gnn": FourierGNN,
     "linear_edge_net": LinearEdgeNet,
     "gotas": GOTAS,
+    "mlp": MLPForecaster,
+    "lstm": LSTMForecaster,
+    "gru": GRUForecaster,
 }
 
 Decomposition = Literal["atrous", "ewt", "seasonal24"]
