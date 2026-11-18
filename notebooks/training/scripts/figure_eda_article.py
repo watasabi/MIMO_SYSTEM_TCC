@@ -44,7 +44,7 @@ ARX_ORDER = 2
 
 
 def coherence_figure(data: pd.DataFrame, inputs: list[str], name: str) -> None:
-    fig, axes = plt.subplots(3, 1, figsize=(WIDTH, 5.0), sharex=True)
+    fig, axes = plt.subplots(3, 1, figsize=(WIDTH, 4.0), sharex=True)
     for k, (ax, out) in enumerate(zip(axes, OUTPUT_COLS, strict=True)):
         for i, col in enumerate(inputs):
             f, cxy = signal.coherence(
@@ -68,7 +68,7 @@ def arx_poles(u: np.ndarray, y: np.ndarray) -> np.ndarray:
 
 
 def poles_figure(data: pd.DataFrame) -> None:
-    fig, ax = plt.subplots(figsize=(WIDTH, 2.9))
+    fig, ax = plt.subplots(figsize=(WIDTH, 2.5))
     offsets = np.linspace(-0.24, 0.24, len(INPUT_COLS))
     for i, col in enumerate(INPUT_COLS):
         for k, out in enumerate(OUTPUT_COLS):
@@ -96,7 +96,7 @@ def stl_figure(data: pd.DataFrame, k: int, name: str) -> None:
         ("Sazonal", res.seasonal),
         ("Resíduo", res.resid),
     ]
-    fig, axes = plt.subplots(4, 1, figsize=(WIDTH, 4.8), sharex=True)
+    fig, axes = plt.subplots(4, 1, figsize=(WIDTH, 3.7), sharex=True)
     for ax, (label, part) in zip(axes, parts, strict=True):
         ax.plot(part.index, part.to_numpy(), color=COLORS[0], lw=0.7)
         ax.set_ylabel(label)
@@ -111,7 +111,7 @@ def stl_figure(data: pd.DataFrame, k: int, name: str) -> None:
 def variance_figure() -> None:
     train = load_splits(FINAL_TRAIN)["train"]
     fig, axes = plt.subplots(
-        3, 1, figsize=(WIDTH, 4.6), sharex=True, sharey=True
+        3, 1, figsize=(WIDTH, 3.6), sharex=True, sharey=True
     )
     for k, (ax, col) in enumerate(zip(axes, TARGET_IDX, strict=True)):
         comps = atrous_components(train[:, col], 4)[WARMUP:]

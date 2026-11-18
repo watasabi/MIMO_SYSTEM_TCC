@@ -26,7 +26,7 @@ LABELS = {
 apply_style()
 splits = load_splits()
 data = np.concatenate([splits[name] for name in ("train", "val", "test")])
-fig, axes = plt.subplots(len(LABELS), 1, figsize=(WIDTH, 7.4), sharex=True)
+fig, axes = plt.subplots(len(LABELS), 1, figsize=(WIDTH, 6.6), sharex=True)
 for ax, (col, label) in zip(axes, LABELS.items(), strict=True):
     ax.plot(data[:, FEATURE_COLS.index(col)], color=COLORS[0], lw=0.55)
     for fold in temporal_folds(len(data)):
