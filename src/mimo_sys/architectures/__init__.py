@@ -28,6 +28,11 @@ from mimo_sys.architectures.baselines import (
 )
 from mimo_sys.architectures.fourier_gnn import FourierGNN
 from mimo_sys.architectures.gotas import GOTAS
+from mimo_sys.architectures.gotas_ae import GOTASAutoencoder
+from mimo_sys.architectures.gotas_attention import GOTASAttention
+from mimo_sys.architectures.gotas_lpv import GOTASLPV
+from mimo_sys.architectures.gotas_ss import GOTASStateSpace
+from mimo_sys.architectures.gotas_wavelet import GOTASWavelet
 from mimo_sys.architectures.linear_edge_net import LinearEdgeNet
 from mimo_sys.architectures.mpnn import MPNNForecaster
 from mimo_sys.architectures.seq2seq_latent_gnn import Seq2SeqLatentGNN
@@ -45,6 +50,11 @@ __all__ = [
     "MPNNForecaster",
     "Seq2SeqLatentGNN",
     "GOTAS",
+    "GOTASLPV",
+    "GOTASStateSpace",
+    "GOTASAttention",
+    "GOTASAutoencoder",
+    "GOTASWavelet",
     "StemGNN",
     "SymbolicGraphNetwork",
 ]

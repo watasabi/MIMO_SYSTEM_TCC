@@ -44,7 +44,12 @@ from torch import nn
 
 from mimo_sys.architectures import (
     GOTAS,
+    GOTASLPV,
     FourierGNN,
+    GOTASAttention,
+    GOTASAutoencoder,
+    GOTASStateSpace,
+    GOTASWavelet,
     GRUForecaster,
     LinearEdgeNet,
     LSTMForecaster,
@@ -122,9 +127,27 @@ ARCHITECTURES: dict[str, type[nn.Module]] = {
     "fourier_gnn": FourierGNN,
     "linear_edge_net": LinearEdgeNet,
     "gotas": GOTAS,
+    "gotas_w": GOTASWavelet,
+    "gotas_lpv": GOTASLPV,
+    "gotas_a": GOTASAttention,
+    "gotas_ss": GOTASStateSpace,
+    "gotas_ae": GOTASAutoencoder,
+    # GOTAS-AE with the explicit Chebyshev residual only (`docs/19`).
+    "gotas_aex": GOTASAutoencoder,
     "mlp": MLPForecaster,
     "lstm": LSTMForecaster,
     "gru": GRUForecaster,
+}
+
+# Models with a horizon mask of known future inputs.
+GOTAS_FAMILY = {
+    "gotas",
+    "gotas_w",
+    "gotas_lpv",
+    "gotas_a",
+    "gotas_ss",
+    "gotas_ae",
+    "gotas_aex",
 }
 
 Decomposition = Literal["atrous", "ewt", "seasonal24"]
@@ -606,7 +629,7 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915 - linear on purpose
     ):
         raise ValueError("seasonal24 needs future_exog and horizon <= 24")
     model_kwargs = dict(cfg.model_kwargs)
-    if cfg.model == "gotas" and cfg.future_exog:
+    if cfg.model in GOTAS_FAMILY and cfg.future_exog:
         # The model's horizon mask must match the columns actually
         # known: a default of all 4 inputs would read the zeroed
         # `vazao_entrada` of the `pumps` scenario as if it were real.

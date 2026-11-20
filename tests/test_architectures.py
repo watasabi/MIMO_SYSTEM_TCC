@@ -13,12 +13,14 @@ import torch
 from mimo_sys.architectures import (
     GOTAS,
     FourierGNN,
+    GOTASWavelet,
     LinearEdgeNet,
     MPNNForecaster,
     Seq2SeqLatentGNN,
     StemGNN,
     SymbolicGraphNetwork,
 )
+from mimo_sys.architectures.gotas_wavelet import atrous
 from mimo_sys.architectures.seq2seq_latent_gnn import GaussianSmoothing
 from mimo_sys.architectures.stemgnn import (
     chebyshev_basis,
@@ -27,6 +29,7 @@ from mimo_sys.architectures.stemgnn import (
 from mimo_sys.architectures.symbolic_graph_network import (
     SavitzkyGolayFilter,
 )
+from mimo_sys.training.features import atrous_components
 
 SEED = 42
 N_NODES = 7
@@ -56,6 +59,7 @@ def build(name: str, **overrides: int) -> torch.nn.Module:
         "fourier_gnn": FourierGNN,
         "linear_edge_net": LinearEdgeNet,
         "gotas": GOTAS,
+        "gotas_w": GOTASWavelet,
     }
     return builders[name](**kwargs)
 
@@ -77,6 +81,7 @@ def window() -> torch.Tensor:
         "fourier_gnn",
         "linear_edge_net",
         "gotas",
+        "gotas_w",
     ],
 )
 def test_output_shape(name: str, window: torch.Tensor) -> None:
@@ -97,6 +102,7 @@ def test_output_shape(name: str, window: torch.Tensor) -> None:
         "fourier_gnn",
         "linear_edge_net",
         "gotas",
+        "gotas_w",
     ],
 )
 def test_seed_determinism(name: str, window: torch.Tensor) -> None:
@@ -296,6 +302,7 @@ def test_sgn_rejects_negative_noise_scale() -> None:
         "fourier_gnn",
         "linear_edge_net",
         "gotas",
+        "gotas_w",
     ],
 )
 def test_backward_reaches_every_parameter(
@@ -544,3 +551,430 @@ def test_gotas_group_l1_mata_aresta_de_ruido() -> None:
     strength = model.band_strength()
     assert strength[:, 0].max() < WEAK_EDGE_NORM_MAX
     assert strength[:, 3].max() > strength[:, 0].max()
+
+
+# ------------------------------------------------------- GOTAS-W
+
+
+def test_atrous_torch_igual_ao_numpy_e_soma_o_sinal() -> None:
+    """A decomposição do GOTAS-W é a mesma de `features` e soma `x`."""
+    torch.manual_seed(SEED)
+    x = torch.randn(1, 40, 1, dtype=torch.float64)
+    comps = atrous(x, 4)
+    reference = atrous_components(x[0, :, 0].numpy(), 4)
+    torch.testing.assert_close(comps[0, :, 0], torch.from_numpy(reference))
+    torch.testing.assert_close(comps.sum(-1), x, atol=1e-10, rtol=0)
+
+
+def test_atrous_e_causal() -> None:
+    """Mudar a linha `t` não muda nenhuma componente antes de `t`."""
+    torch.manual_seed(SEED)
+    x = torch.randn(1, 40, 2)
+    tampered = x.clone()
+    tampered[:, 25:] += 5.0
+    torch.testing.assert_close(
+        atrous(x, 4)[:, :25], atrous(tampered, 4)[:, :25]
+    )
+
+
+def test_gotas_w_ignora_alvos_futuros(window: torch.Tensor) -> None:
+    torch.manual_seed(SEED)
+    model = build("gotas_w", levels=2, lags=2).eval()
+    tampered = window.clone()
+    tampered[:, PAST:, TARGET_IDX] = 100.0
+    torch.testing.assert_close(model(window), model(tampered))
+
+
+def test_gotas_w_passo_nao_le_entradas_posteriores(
+    window: torch.Tensor,
+) -> None:
+    """O passo `k` só lê as entradas conhecidas até o próprio passo."""
+    torch.manual_seed(SEED)
+    model = build("gotas_w", levels=2, lags=2).eval()
+    tampered = window.clone()
+    tampered[:, -1, KNOWN_FUTURE] += 10.0
+    first, second = model(window), model(tampered)
+    torch.testing.assert_close(first[:, :-1], second[:, :-1])
+    assert not torch.allclose(first[:, -1], second[:, -1])
+
+
+@pytest.mark.parametrize("centre", ["mean", "median", "last"])
+def test_gotas_w_centros_e_limite(window: torch.Tensor, centre: str) -> None:
+    torch.manual_seed(SEED)
+    model = build(
+        "gotas_w", levels=2, lags=2, centre=centre, detail_limit=3.0
+    ).eval()
+    out = model(window)
+    assert out.shape == (BATCH, OUTPUT_WINDOW, len(TARGET_IDX))
+    assert torch.isfinite(out).all()
+
+
+def test_gotas_w_rejeita_centro_desconhecido() -> None:
+    with pytest.raises(ValueError, match="centre"):
+        build("gotas_w", centre="moda")
+
+
+def test_gotas_w_impulse_response_e_o_filtro_de_um_passo() -> None:
+    """O núcleo de `impulse_response` reproduz a saída de um passo."""
+    torch.manual_seed(SEED)
+    model = build(
+        "gotas_w", input_window=60, output_window=1, levels=2, lags=3
+    ).eval()
+    kernel = model.impulse_response(1, 2)
+    pos, delay = 50, 5
+    norm = torch.zeros(1, 60, N_NODES)
+    norm[0, pos - delay, 2] = 1.0
+    with torch.no_grad():
+        step = model._step(norm, pos)  # noqa: SLF001 - o filtro em si
+    torch.testing.assert_close(
+        step[0, 1] - model.bias[1], kernel[delay], atol=1e-6, rtol=0
+    )
+
+
+def test_gotas_w_group_l1_e_component_strength() -> None:
+    torch.manual_seed(SEED)
+    model = build("gotas_w", levels=2, lags=3)
+    assert model.group_l1() > 0
+    assert model.component_strength().shape == (len(TARGET_IDX), N_NODES, 3)
+
+
+# ----------------------------------------------------- GOTAS-LPV
+
+
+def test_gotas_lpv_desligado_e_igual_ao_gotas_w(window: torch.Tensor) -> None:
+    from mimo_sys.architectures.gotas_lpv import GOTASLPV  # noqa: PLC0415
+
+    kwargs = {
+        "n_nodes": N_NODES,
+        "input_window": INPUT_WINDOW,
+        "output_window": OUTPUT_WINDOW,
+        "target_idx": TARGET_IDX,
+        "levels": 2,
+        "lags": 2,
+    }
+    torch.manual_seed(SEED)
+    base = GOTASWavelet(**kwargs).eval()
+    torch.manual_seed(SEED)
+    lpv = GOTASLPV(**kwargs).eval()
+    torch.testing.assert_close(base(window), lpv(window))
+
+
+def test_gotas_lpv_modula_com_as_bombas(window: torch.Tensor) -> None:
+    from mimo_sys.architectures.gotas_lpv import GOTASLPV  # noqa: PLC0415
+
+    torch.manual_seed(SEED)
+    model = GOTASLPV(
+        n_nodes=N_NODES,
+        input_window=INPUT_WINDOW,
+        output_window=OUTPUT_WINDOW,
+        target_idx=TARGET_IDX,
+        levels=2,
+        lags=2,
+        lpv=True,
+        hammerstein_degree=3,
+    )
+    before = model(window).detach()
+    with torch.no_grad():
+        model.lpv_weight.fill_(0.1)
+        model.hammerstein.fill_(0.1)
+    after = model(window)
+    assert not torch.allclose(before, after)
+    target = torch.randn_like(after)
+    torch.nn.functional.mse_loss(after, target).backward()
+    assert model.lpv_weight.grad is not None
+    assert model.hammerstein.grad is not None
+    assert model.group_l1() > 0
+    assert model.lpv_strength().shape == (len(TARGET_IDX), N_NODES, 3, 3)
+
+
+def test_gotas_lpv_rejeita_agendamento_desconhecido() -> None:
+    from mimo_sys.architectures.gotas_lpv import GOTASLPV  # noqa: PLC0415
+
+    with pytest.raises(ValueError, match="scheduling"):
+        GOTASLPV(
+            n_nodes=N_NODES,
+            input_window=INPUT_WINDOW,
+            output_window=OUTPUT_WINDOW,
+            target_idx=TARGET_IDX,
+            lpv=True,
+            scheduling_idx=(5,),
+        )
+
+
+# ------------------------------------------------------- GOTAS-A
+
+
+def _gotas_a(**kwargs: object) -> torch.nn.Module:
+    from mimo_sys.architectures.gotas_attention import (  # noqa: PLC0415
+        GOTASAttention,
+    )
+
+    return GOTASAttention(
+        n_nodes=N_NODES,
+        input_window=INPUT_WINDOW,
+        output_window=OUTPUT_WINDOW,
+        target_idx=TARGET_IDX,
+        **kwargs,
+    )
+
+
+@pytest.mark.parametrize("operating", [False, True])
+def test_gotas_a_formato_e_atencao_soma_um(
+    window: torch.Tensor, operating: bool
+) -> None:
+    torch.manual_seed(SEED)
+    model = _gotas_a(operating_query=operating, residual_hidden=4).eval()
+    out = model(window)
+    assert out.shape == (BATCH, OUTPUT_WINDOW, len(TARGET_IDX))
+    attn = model.attention(window)
+    torch.testing.assert_close(attn.sum(-1), torch.ones_like(attn.sum(-1)))
+
+
+def test_gotas_a_ignora_alvos_futuros_e_entradas_posteriores(
+    window: torch.Tensor,
+) -> None:
+    torch.manual_seed(SEED)
+    model = _gotas_a()
+    with torch.no_grad():
+        model.future.normal_()
+    model.eval()
+    tampered = window.clone()
+    tampered[:, PAST:, TARGET_IDX] = 100.0
+    torch.testing.assert_close(model(window), model(tampered))
+    tampered = window.clone()
+    tampered[:, -1, KNOWN_FUTURE] += 10.0
+    first, second = model(window), model(tampered)
+    torch.testing.assert_close(first[:, :-1], second[:, :-1])
+    assert not torch.allclose(first[:, -1], second[:, -1])
+
+
+def test_gotas_a_nucleo_explicito_reproduz_a_saida(
+    window: torch.Tensor,
+) -> None:
+    """Com atenção fixa, cada aresta é o filtro `g * a` de `kernel`."""
+    torch.manual_seed(SEED)
+    model = _gotas_a().eval()
+    past = window[:, :PAST]
+    last = past[:, -1]
+    history = past[:, :-1].flip(1) - last[:, None]
+    kernel = model.kernel()  # (i, k, j, l)
+    linear = torch.einsum("ikjl,blj->bik", kernel, history)
+    expected = (
+        linear + model.bias + last[:, model.target_idx, None]
+    ).transpose(1, 2)
+    torch.testing.assert_close(model(window), expected)
+
+
+def test_gotas_a_backward_e_group_l1(window: torch.Tensor) -> None:
+    torch.manual_seed(SEED)
+    model = _gotas_a(operating_query=True, residual_hidden=4)
+    loss = model(window).pow(2).mean() + model.group_l1()
+    loss.backward()
+    missing = [n for n, p in model.named_parameters() if p.grad is None]
+    assert not missing, f"sem gradiente: {missing}"
+
+
+def test_gotas_lpv_group_l1_tem_gradiente_finito_no_inicio(
+    window: torch.Tensor,
+) -> None:
+    """Modulações zeradas no início não podem dar NaN na penalidade."""
+    from mimo_sys.architectures.gotas_lpv import GOTASLPV  # noqa: PLC0415
+
+    torch.manual_seed(SEED)
+    model = GOTASLPV(
+        n_nodes=N_NODES,
+        input_window=INPUT_WINDOW,
+        output_window=OUTPUT_WINDOW,
+        target_idx=TARGET_IDX,
+        levels=2,
+        lags=2,
+        lpv=True,
+    )
+    model.group_l1().backward()
+    assert torch.isfinite(model.lpv_weight.grad).all()
+
+
+# ------------------------------------------------------ GOTAS-SS
+
+
+def _gotas_ss(**kwargs: object) -> torch.nn.Module:
+    from mimo_sys.architectures.gotas_ss import GOTASStateSpace  # noqa: PLC0415
+
+    return GOTASStateSpace(
+        n_nodes=N_NODES,
+        input_window=INPUT_WINDOW,
+        output_window=OUTPUT_WINDOW,
+        target_idx=TARGET_IDX,
+        state_dim=4,
+        encoder_lags=4,
+        **kwargs,
+    )
+
+
+def test_gotas_ss_formato_estabilidade_e_gradiente(
+    window: torch.Tensor,
+) -> None:
+    torch.manual_seed(SEED)
+    model = _gotas_ss(residual_hidden=4)
+    with torch.no_grad():
+        model.a_raw.mul_(10.0)
+    out = model(window)
+    assert out.shape == (BATCH, OUTPUT_WINDOW, len(TARGET_IDX))
+    assert model.poles().abs().max() < 1.0
+    (out.pow(2).mean() + model.group_l1()).backward()
+    missing = [n for n, p in model.named_parameters() if p.grad is None]
+    assert not missing, f"sem gradiente: {missing}"
+
+
+def test_gotas_ss_ignora_alvos_futuros_e_entradas_posteriores(
+    window: torch.Tensor,
+) -> None:
+    torch.manual_seed(SEED)
+    model = _gotas_ss()
+    with torch.no_grad():
+        model.d.normal_()
+    model.eval()
+    tampered = window.clone()
+    tampered[:, PAST:, TARGET_IDX] = 100.0
+    torch.testing.assert_close(model(window), model(tampered))
+    tampered = window.clone()
+    tampered[:, -1, KNOWN_FUTURE] += 10.0
+    first, second = model(window), model(tampered)
+    torch.testing.assert_close(first[:, :-1], second[:, :-1])
+
+
+def test_gotas_ss_transferencia_em_z_infinito_e_d() -> None:
+    """Para |z| grande, C (zI - A)^-1 B tende a zero e sobra D."""
+    torch.manual_seed(SEED)
+    model = _gotas_ss()
+    with torch.no_grad():
+        model.d.normal_()
+    far = model.transfer(torch.tensor(1e6, dtype=torch.complex64))
+    torch.testing.assert_close(far.real, model.d.detach(), atol=1e-4, rtol=0)
+
+
+def _gotas_ae(**kwargs: object) -> torch.nn.Module:
+    from mimo_sys.architectures.gotas_ae import GOTASAutoencoder  # noqa: PLC0415
+
+    return GOTASAutoencoder(
+        n_nodes=N_NODES,
+        input_window=INPUT_WINDOW,
+        output_window=OUTPUT_WINDOW,
+        target_idx=TARGET_IDX,
+        latent_dim=4,
+        attention_dim=4,
+        **kwargs,
+    )
+
+
+@pytest.mark.parametrize("levels", [0, 2])
+@pytest.mark.parametrize("anchor", ["mean", "last"])
+@pytest.mark.parametrize("kind", ["mlp", "chebyshev"])
+def test_gotas_ae_formato_e_gradiente(
+    window: torch.Tensor, levels: int, anchor: str, kind: str
+) -> None:
+    torch.manual_seed(SEED)
+    model = _gotas_ae(
+        levels=levels, anchor=anchor, residual_hidden=4, residual_kind=kind
+    )
+    with torch.no_grad():
+        model.query_input.normal_()
+    out = model(window)
+    assert out.shape == (BATCH, OUTPUT_WINDOW, len(TARGET_IDX))
+    (out.pow(2).mean() + model.group_l1()).backward()
+    missing = [n for n, p in model.named_parameters() if p.grad is None]
+    assert not missing, f"sem gradiente: {missing}"
+
+
+def test_gotas_ae_ignora_alvos_futuros_e_entradas_posteriores(
+    window: torch.Tensor,
+) -> None:
+    torch.manual_seed(SEED)
+    model = _gotas_ae(levels=2)
+    with torch.no_grad():
+        model.query_input.normal_()
+        model.direct.normal_()
+    model.eval()
+    tampered = window.clone()
+    tampered[:, PAST:, TARGET_IDX] = 100.0
+    torch.testing.assert_close(model(window), model(tampered))
+    tampered = window.clone()
+    tampered[:, -1, KNOWN_FUTURE] += 10.0
+    first, second = model(window), model(tampered)
+    torch.testing.assert_close(first[:, :-1], second[:, :-1])
+    assert not torch.allclose(first[:, -1], second[:, -1])
+
+
+def test_gotas_ae_kernel_reproduz_a_previsao(window: torch.Tensor) -> None:
+    """Dada a atenção, a previsão é a soma do kernel nas bandas."""
+    from mimo_sys.architectures.gotas_wavelet import atrous  # noqa: PLC0415
+
+    torch.manual_seed(SEED)
+    model = _gotas_ae(levels=2, anchor="mean")
+    with torch.no_grad():
+        model.query_input.normal_()
+        model.direct.normal_()
+    model.eval()
+    past = window[:, :PAST]
+    mu = past.mean(1, keepdim=True)
+    bands = atrous(past - mu, 2)  # (b, τ, n, m)
+    kernel = model.kernel(window)  # (b, K, i, n, m, τ)
+    linear = torch.einsum("bkinmt,btnm->bki", kernel, bands)
+    u = window[:, PAST:, KNOWN_FUTURE] - mu[:, :, KNOWN_FUTURE]
+    expected = (
+        linear
+        + u @ model.direct.detach().T
+        + model.bias.detach()
+        + mu[:, :, TARGET_IDX]
+    )
+    torch.testing.assert_close(model(window), expected, atol=1e-5, rtol=0)
+
+
+def test_gotas_ae_falha_longa_tem_efeito_limitado(
+    window: torch.Tensor,
+) -> None:
+    """O contexto é média ponderada: uma falha não se soma no kernel."""
+    torch.manual_seed(SEED)
+    model = _gotas_ae(levels=0)
+    model.eval()
+    attention = model.attention(window)
+    torch.testing.assert_close(
+        attention.sum(-1), torch.ones_like(attention.sum(-1))
+    )
+    assert (attention >= 0).all()
+
+
+@pytest.mark.parametrize("anchor", ["mean", "last"])
+def test_gotas_ae_equacao_com_atencao_fixa_e_exata(
+    window: torch.Tensor, anchor: str
+) -> None:
+    """A equação extraída reproduz o modelo com a mesma atenção fixa."""
+    torch.manual_seed(SEED)
+    model = _gotas_ae(levels=2, anchor=anchor, residual_hidden=4)
+    with torch.no_grad():
+        model.query_input.normal_()
+        model.direct.normal_()
+    model.eval()
+    model.attention_log = []
+    model(window)
+    total, count = model.attention_log[0]
+    mean = total / count
+    model.attention_log = None
+    offset, h, g = model.equation(mean)
+    past = window[:, :PAST]
+    future = window[:, PAST:, KNOWN_FUTURE]
+    expected = (
+        offset
+        + torch.einsum("kitn,btn->bki", h, past)
+        + torch.einsum("kilq,blq->bki", g, future)
+    )
+    targets = past[..., TARGET_IDX]
+    anchor = targets[:, -1:] if anchor == "last" else targets.mean(1, True)
+    expected += anchor
+    residual = model.residual
+    model.residual, model.fixed_attention = None, mean
+    torch.testing.assert_close(model(window), expected, atol=1e-5, rtol=0)
+    model.residual, model.fixed_attention = residual, None
+    strength, kept = model.subgraph(h, g, model.known_idx)
+    assert strength.shape == (len(TARGET_IDX), N_NODES)
+    assert kept.any(1).all()

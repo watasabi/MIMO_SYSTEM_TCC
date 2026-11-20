@@ -12,6 +12,10 @@ from torch import nn
 
 from mimo_sys.architectures import (
     GOTAS,
+    GOTASAttention,
+    GOTASAutoencoder,
+    GOTASStateSpace,
+    GOTASWavelet,
     LinearEdgeNet,
     MPNNForecaster,
     Seq2SeqLatentGNN,
@@ -270,12 +274,18 @@ class Forecaster(L.LightningModule):
         ):
             aux += hp.message_l1_weight * core.message_l1()
         if hp.message_l1_weight > 0 and isinstance(
-            core, (LinearEdgeNet, GOTAS)
+            core,
+            (
+                LinearEdgeNet,
+                GOTAS,
+                GOTASWavelet,
+                GOTASAttention,
+                GOTASStateSpace,
+                GOTASAutoencoder,
+            ),
         ):
             aux += hp.message_l1_weight * core.group_l1()
-        if hp.backcast_weight > 0 and isinstance(
-            core, (StemGNN, GOTAS)
-        ):
+        if hp.backcast_weight > 0 and isinstance(core, (StemGNN, GOTAS)):
             aux += hp.backcast_weight * core.backcast_loss(seen)
         return aux
 

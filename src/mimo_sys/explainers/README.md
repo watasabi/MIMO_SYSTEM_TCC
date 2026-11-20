@@ -212,15 +212,16 @@ filtro fica a cargo de quem chama.
 from mimo_sys.explainers.equation import distill_message_fn
 
 psi = distill_message_fn(
-    inputs, messages,
+    inputs,
+    messages,
     input_window=3,
     niterations=100,
     binary_operators=["+", "-", "*", "/"],
     unary_operators=["square"],
 )
-psi.equations_   # frente de Pareto (complexidade, loss, expressão)
-psi.sympy()      # expressão escolhida, como objeto sympy
-psi.latex()      # pronta para o TCC
+psi.equations_  # frente de Pareto (complexidade, loss, expressão)
+psi.sympy()  # expressão escolhida, como objeto sympy
+psi.latex()  # pronta para o TCC
 ```
 
 Qualquer argumento extra vai direto para `pysr.PySRRegressor`.
@@ -354,11 +355,16 @@ ou seja, a norma média da mensagem de `j` para `i` sobre `B` amostras.
    from mimo_sys.explainers.graph import edge_strength_frame
 
    FEATURE_COLS = [
-       "freq_b1", "freq_b2", "freq_b3", "vazao_entrada",
-       "vazao_distribuicao", "nivel_res", "pressao",
+       "freq_b1",
+       "freq_b2",
+       "freq_b3",
+       "vazao_entrada",
+       "vazao_distribuicao",
+       "nivel_res",
+       "pressao",
    ]
    frame = edge_strength_frame(model, x, feature_names=FEATURE_COLS)
-   frame.loc["nivel_res", "vazao_entrada"]   # quanto u4 empurra em y2
+   frame.loc["nivel_res", "vazao_entrada"]  # quanto u4 empurra em y2
    ```
 
 4. Ler por **linha** (o que chega em cada nó) e comparar com a
@@ -427,8 +433,8 @@ implementado.
 from mimo_sys.explainers.graph import PGExplainerTopology
 
 topology = PGExplainerTopology(wrapped_model, n_nodes=7, epochs=30)
-topology.fit(x, target)          # treino do explainer
-mask = topology.explain(x, target)   # (42,), uma entrada por aresta
+topology.fit(x, target)  # treino do explainer
+mask = topology.explain(x, target)  # (42,), uma entrada por aresta
 ```
 
 1. No construtor, monta o `edge_index` do grafo completo sem

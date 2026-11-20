@@ -72,10 +72,10 @@ então a topologia sai de graça — não há matriz de adjacência separada par
 ### API de extração
 
 ```python
-model.message_l1()                  # somar à loss; Cranmer et al. usam peso 1e-2
-model.edge_strength(x)              # [7, 7]; [i, j] = quanto j empurra em i
-model.collect_message_io(x)         # Estágio I: (inputs, messages)
-model.collect_update_io(x)          # Estágio II: (inputs, outputs)
+model.message_l1()  # somar à loss; Cranmer et al. usam peso 1e-2
+model.edge_strength(x)  # [7, 7]; [i, j] = quanto j empurra em i
+model.collect_message_io(x)  # Estágio I: (inputs, messages)
+model.collect_update_io(x)  # Estágio II: (inputs, outputs)
 ```
 
 - **Ordem das colunas em `collect_message_io`:** janela do **receptor** `i`, depois do
