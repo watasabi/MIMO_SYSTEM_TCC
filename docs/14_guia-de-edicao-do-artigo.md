@@ -111,6 +111,28 @@ continua no doc 13.
 
 ## 5. Decisões de conteúdo (não refazer)
 
+**Revisão de 20/11/2026 (vale sobre o que vem abaixo).** O **GOTAS** do
+artigo agora é a versão final com *autoencoder*: *Graph Operator for
+Transfer-function **Autoencoder** in the Spectral domain*, no código
+`GOTASAutoencoder` com o nome `gotas_aex` (resíduo de Chebyshev, treino com
+falhas simuladas; `docs/19`). A versão espectral descrita nas Figuras 7 e 8 e
+na Tabela de configuração passou a se chamar **GOTAS-ARX** (primeira versão,
+`gotas` no código). Os resultados são os da validação cruzada, em média ±
+desvio dos 5 folds (`outputs/cv/report_extended.json`): teste `full`
+0,834 ± 0,059 (XGBoost 0,832, CatBoost 0,824, ARMAX 0,536), `pumps`
+0,689 ± 0,117; pós-hoc contra o GOTAS final. A equação e o subgrafo vêm de
+`notebooks/training/scripts/extract_gotas_ae.py` (`*_falhas_simuladas.npz`),
+e as figuras `cv_*` de `figure_cv_results.py`. A aproximação de Laplace saiu
+do texto. O autor pediu que o *autoencoder* seja citado no referencial e na
+arquitetura; o texto também declara que o treino desliga o ramo de atenção.
+As Figuras 9 e 10 (arquitetura do GOTAS) vêm de
+`docs/figures/gotas_ae_arquitetura.drawio`, páginas `fluxo` e `paineis`,
+geradas por `docs/figures/gotas_ae_arquitetura_gera.py` e exportadas com o
+draw.io Desktop (`drawio -x -f pdf --crop -p 1|2`); a figura antiga do
+GOTAS-ARX saiu do artigo. A Figura 11 (folds sobre as séries) vem de
+`notebooks/training/scripts/figure_cv_folds.py`. Legendas: título curto no
+`\caption` e a chave de cores ou de painéis, curta, no `\legend`.
+
 **O modelo.** Chama-se **GOTAS** (*Graph Operator for Transfer-function
 ARX in the Spectral domain*); no código a classe continua
 `SpectralTFNet`. O modelo final é o SpectralTFNet do doc 8 com a
@@ -191,6 +213,13 @@ o código MATLAB do MOGWO. Pendente: rodar com os parâmetros completos e
 conferir.
 
 ## 7. Armadilhas já vistas
+
+**Limpeza de 20/11/2026.** Os scripts das fases anteriores (GOTAS-ARX na divisão
+70/15/15, relatórios e figuras que saíram do artigo, inclusive
+`extract_spectral_tf_net.py`), os checkpoints em `models/`, os `mlruns` e as
+saídas antigas em `outputs/` foram removidos; o código continua no histórico do
+git. As tabelas e armadilhas abaixo que citam esses arquivos valem só como
+registro. O pipeline atual está no `AGENT.md`.
 
 - **`extract_spectral_tf_net.py` treina o modelo do doc 8 do zero e salva
   por cima de `models/spectral_tf_net_h12_w168_s42.pth`.** Não rode para
