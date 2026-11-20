@@ -1,54 +1,71 @@
-"""Figura das sete séries do reservatório, com as divisões usadas.
+"""Figura das sete séries do reservatório, com as falhas de sensor.
 
 Gera `dados_series.pdf` para a subseção Materiais do artigo: as quatro
-entradas e as três saídas no tempo, com o treino/validação/teste
-(70/15/15) e o recorte do estudo de referência marcados.
+entradas e as três saídas no tempo, na série de 2.208 horas usada na
+validação cruzada, com as linhas de falha de sensor sombreadas (as 22
+marcadas pelas regras físicas, com margem, e o trecho 1.445--1.488). Não
+marca nenhuma divisão de dados: os folds estão na figura própria
+(`figure_cv_folds.py`).
+
+Uso (da raiz do repo):
+    .venv/bin/python notebooks/training/scripts/figure_dataset_series.py
 """
+
+from __future__ import annotations
 
 from pathlib import Path
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
-import pandas as pd
+import numpy as np
+from run_cv_benchmark import BAD, RAW
 
-ROOT = Path(__file__).resolve().parents[3]
-OUT = Path.home() / 'code/TCC_MIMO_SYS_overleaf/imagens/dados_series.pdf'
+OUT = Path.home() / "code/TCC_MIMO_SYS_overleaf/imagens/dados_series.pdf"
+PANELS = (
+    (0, "Bomba 1\n$u_1$ (Hz)"),
+    (1, "Bomba 2\n$u_2$ (Hz)"),
+    (2, "Bomba 3\n$u_3$ (Hz)"),
+    (3, "Entrada\n$u_4$ (l/s)"),
+    (4, "Distribuição\n$y_1$ (l/s)"),
+    (5, "Nível\n$y_2$ (m)"),
+    (6, "Pressão\n$y_3$ (mca)"),
+)
 
-data = pd.read_parquet(ROOT / 'data/processed/mimo_data.parquet')
-hours = range(len(data))
+mpl.rcParams.update(
+    {
+        "font.size": 10,
+        "axes.labelsize": 9,
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
+        "pdf.fonttype": 42,
+    }
+)
 
-panels: list[tuple[str, str]] = [
-    ('freq_b1', 'bomba 1 $u_1$ (Hz)'),
-    ('freq_b2', 'bomba 2 $u_2$ (Hz)'),
-    ('freq_b3', 'bomba 3 $u_3$ (Hz)'),
-    ('vazao_entrada', 'vazão de\nentrada $u_4$ (l/s)'),
-    ('vazao_distribuicao', 'vazão de\ndistribuição $y_1$ (l/s)'),
-    ('nivel_res', 'nível $y_2$ (m)'),
-    ('pressao', 'pressão $y_3$ (mca)'),
-]
 
-n_train, n_val = 1545, 331
-fig, axes = plt.subplots(len(panels), 1, figsize=(10, 10), sharex=True)
-for ax, (col, ylabel) in zip(axes, panels):
-    ax.plot(hours, data[col], lw=0.6, color='C0')
-    ax.axvspan(n_train, n_train + n_val, color='0.85', zorder=0)
-    ax.axvspan(n_train + n_val, len(data), color='0.7', zorder=0)
-    ax.set_ylabel(ylabel, fontsize=8)
+def failure_spans() -> list[tuple[int, int]]:
+    rows = np.flatnonzero(BAD)
+    starts = rows[np.r_[True, np.diff(rows) > 1]]
+    ends = rows[np.r_[np.diff(rows) > 1, True]]
+    return [(int(a), int(b) + 1) for a, b in zip(starts, ends, strict=True)]
 
-for start, end in [(550, 1150), (1500, 2000)]:
-    axes[0].annotate(
-        '', xy=(end, 1.04), xytext=(start, 1.04),
-        xycoords=('data', 'axes fraction'),
-        arrowprops={'arrowstyle': '<->', 'color': 'k', 'lw': 0.8},
-    )
-axes[0].text(850, 1.08, 'estimação (referência)', ha='center',
-             transform=axes[0].get_xaxis_transform(), fontsize=8)
-axes[0].text(1750, 1.08, 'validação (referência)', ha='center',
-             transform=axes[0].get_xaxis_transform(), fontsize=8)
-axes[-1].text(n_train + n_val / 2, 0.05, 'val.', ha='center',
-              transform=axes[-1].get_xaxis_transform(), fontsize=8)
-axes[-1].text(n_train + n_val * 1.5, 0.05, 'teste', ha='center',
-              transform=axes[-1].get_xaxis_transform(), fontsize=8)
-axes[-1].set_xlabel('hora (27/07/2014 a 27/10/2014)')
-fig.tight_layout()
-fig.savefig(OUT)
-print(OUT)
+
+def main() -> None:
+    spans = failure_spans()
+    hours = np.arange(len(RAW))
+    fig, axes = plt.subplots(len(PANELS), 1, figsize=(6.3, 7.6), sharex=True)
+    for ax, (col, label) in zip(axes, PANELS, strict=True):
+        for a, b in spans:
+            ax.axvspan(a, b, color="#c44e52", alpha=0.25, lw=0)
+        ax.plot(hours, RAW[:, col], lw=0.5, color="0.15")
+        ax.set_ylabel(label)
+        ax.grid(alpha=0.25)
+    axes[-1].set_xlabel("Hora da série (27/07/2014 a 27/10/2014)")
+    axes[-1].set_xlim(0, len(RAW))
+    fig.align_ylabels(axes)
+    fig.tight_layout(h_pad=0.3)
+    fig.savefig(OUT)
+    print(OUT)
+
+
+if __name__ == "__main__":
+    main()

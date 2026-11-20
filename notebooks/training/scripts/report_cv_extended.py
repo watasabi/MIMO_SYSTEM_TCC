@@ -23,15 +23,18 @@ Uso (da raiz do repo):
 
 from __future__ import annotations
 
+import csv
 import json
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from run_cv_all import FINAL_SEEDS, MODELS, N_FOLDS, OUT, pred_path  # noqa: E402
+from run_cv_all import FINAL_SEEDS, N_FOLDS, OUT, pred_path  # noqa: E402
+from run_cv_all import MODELS as SEARCHED  # noqa: E402
 from run_cv_benchmark import (  # noqa: E402
     BAD,
     FOLDS,
@@ -60,7 +63,14 @@ from mimo_sys.training.mass_balance_cascade import apply_level_blend  # noqa: E4
 OUTPUTS = ["vazao_distribuicao", "nivel_res", "pressao"]
 REPORT = OUT / "report_extended.json"
 TABLE = OUT / "report_extended.txt"
+FOLD_CSV = OUT / "report_por_fold.csv"
 ZERO_GUARD = 1e-9
+# Modelos buscados mais o GOTAS 3 (`docs/19`), treinado por `run_gotas_v2.py
+# final` com as previsões no mesmo formato.
+MODELS = (*SEARCHED, "gotas3")
+# Referência do pós-hoc: o GOTAS final (GOTAS-AE explícito, `docs/19`),
+# treinado por `run_gotas_v2.py final gotas_aex gotas_aex falhas_simuladas`.
+REFERENCE = "gotas_aex"
 VARIANCE_GUARD = 1e-12
 
 
@@ -196,6 +206,9 @@ def summarize_folds(per_fold: list[dict]) -> dict:
             "desvio_saidas": round(float(np.nanmean(values, axis=1).std()), 5),
             "media_por_saida": np.nanmean(values, axis=0).round(5).tolist(),
             "desvio_por_saida": values.std(axis=0).round(5).tolist(),
+            # (fold, saída) e a média das saídas em cada fold.
+            "por_fold": values.round(5).tolist(),
+            "por_fold_media": np.nanmean(values, axis=1).round(5).tolist(),
         }
     out["folds"] = len(per_fold)
     return out
@@ -233,15 +246,15 @@ def _paired_test_arrays(
 
 
 def posthoc(scenario: str) -> dict:
-    """Bootstrap pareado + Diebold-Mariano de cada modelo contra o GOTAS."""
+    """Bootstrap pareado + Diebold-Mariano contra `REFERENCE`."""
     out = {}
     base_runs = {
-        k: model_runs("gotas", scenario, k) for k in range(1, N_FOLDS + 1)
+        k: model_runs(REFERENCE, scenario, k) for k in range(1, N_FOLDS + 1)
     }
     if any(r is None for r in base_runs.values()):
         return out
     for model in MODELS:
-        if model == "gotas":
+        if model == REFERENCE:
             continue
         runs = {
             k: model_runs(model, scenario, k) for k in range(1, N_FOLDS + 1)
@@ -352,7 +365,7 @@ def render_scenario(scenario: str, data: dict) -> list[str]:
             f"-> teste {d['test']['r2']['media_saidas']:.3f}"
         )
     lines.append(
-        f"\n## {scenario}: pós-hoc vs. GOTAS "
+        f"\n## {scenario}: pós-hoc vs. {REFERENCE} "
         "(bootstrap pareado + Diebold-Mariano)"
     )
     for model, p in data["posthoc_vs_gotas"].items():
@@ -365,6 +378,82 @@ def render_scenario(scenario: str, data: dict) -> list[str]:
     return lines
 
 
+def render_folds(scenario: str, data: dict) -> list[str]:
+    """R² médio das 3 saídas em cada fold: validação → teste, e posição.
+
+    A posição é a do modelo no teste daquele fold, entre os modelos com
+    validação (sem as referências ingênuas).
+    """
+    models = [m for m in data["modelos"] if m not in NO_VAL_BASELINE]
+    test = {
+        m: data["modelos"][m]["test"]["r2"]["por_fold_media"] for m in models
+    }
+    val = {
+        m: data["modelos"][m]["val"]["r2"]["por_fold_media"] for m in models
+    }
+    rank = {
+        m: [
+            1 + sum(test[o][k] > test[m][k] for o in models)
+            for k in range(N_FOLDS)
+        ]
+        for m in models
+    }
+    lines = [
+        f"\n## {scenario}: R² por fold (média das 3 saídas, 12 h), "
+        "validação -> teste [posição no teste]",
+        f"{'modelo':20s} "
+        + " ".join(f"{'fold ' + str(k + 1):>22s}" for k in range(N_FOLDS)),
+    ]
+    for m in sorted(models, key=lambda m: -np.mean(test[m])):
+        cells = [
+            f"{val[m][k]:6.3f} -> {test[m][k]:6.3f} [{rank[m][k]:2d}]"
+            for k in range(N_FOLDS)
+        ]
+        lines.append(f"{m:20s} " + " ".join(f"{c:>22s}" for c in cells))
+    for name in sorted(NO_VAL_BASELINE):
+        ref = data["modelos"][name]["test"]["r2"]["por_fold_media"]
+        cells = [f"{'':6s}    {v:6.3f}     " for v in ref]
+        lines.append(f"{name:20s} " + " ".join(f"{c:>22s}" for c in cells))
+    return lines
+
+
+def _metric_rows(values: dict) -> Iterator[tuple[int, str, float]]:
+    """(fold, saída, valor) de uma métrica, mais a média das 3 saídas."""
+    for k, row in enumerate(values["por_fold"], start=1):
+        yield from ((k, out, v) for out, v in zip(OUTPUTS, row, strict=True))
+        yield k, "media_3_saidas", values["por_fold_media"][k - 1]
+
+
+def fold_rows(summary: dict) -> Iterator[list]:
+    """Uma linha por cenário, modelo, conjunto, métrica, fold e saída."""
+    for scenario, data in summary.items():
+        for model, splits in data["modelos"].items():
+            for split, metrics in splits.items():
+                for name, values in metrics.items():
+                    if name == "folds":
+                        continue
+                    for k, out, value in _metric_rows(values):
+                        yield [scenario, model, k, split, name, out, value]
+
+
+def write_fold_csv(summary: dict) -> None:
+    """CSV em formato longo, para filtrar por fold, modelo ou métrica."""
+    with FOLD_CSV.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "cenario",
+                "modelo",
+                "fold",
+                "conjunto",
+                "metrica",
+                "saida",
+                "valor",
+            ]
+        )
+        writer.writerows(fold_rows(summary))
+
+
 def main() -> None:
     summary = {
         scenario: {
@@ -374,10 +463,12 @@ def main() -> None:
         for scenario in SCENARIOS
     }
     REPORT.write_text(json.dumps(summary, indent=1, ensure_ascii=False))
+    write_fold_csv(summary)
     lines = [
         line
         for scenario, data in summary.items()
         for line in render_scenario(scenario, data)
+        + render_folds(scenario, data)
     ]
     TABLE.write_text("\n".join(lines))
     print("\n".join(lines))

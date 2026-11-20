@@ -43,7 +43,16 @@ MODELS = (
     "seq2seq_latent_gnn",
     "fourier_gnn",
     "armax",
+    "gotas_w",
+    "gotas_lpv",
+    "gotas_a",
+    "gotas_ss",
+    "gotas_ae",
+    "gotas_aex",
 )
+# `MIMO_CV_TUNE_ONLY=1` roda só a busca: a triagem do GOTAS-W
+# (`docs/18_plano-gotas-w.md`) compara modelos sem abrir o teste.
+TUNE_ONLY = os.environ.get("MIMO_CV_TUNE_ONLY") == "1"
 # Menos arenas de memória e poucas threads por processo: o paralelismo
 # vem de rodar vários processos.
 CHILD_ENV = {
@@ -105,6 +114,8 @@ def run_job(job: Job, n_trials: int) -> bool:
     """Busca e avaliação final de um modelo, cenário e fold."""
     if step("tune", job, n_trials) != 0:
         return False
+    if TUNE_ONLY:
+        return True
     return step("final", job, n_trials) == 0 and finished(job)
 
 

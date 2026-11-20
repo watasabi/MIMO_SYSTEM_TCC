@@ -98,8 +98,22 @@ MIN_AVAILABLE_PLUS_SWAP_MB = 1000
 # entrada medida fica baixa enquanto o nível sobe.
 UNFLAGGED_FAILURE = (1445, 1488)
 WINDOWS = [24, 48, 96, 168]
+# Variantes novas do GOTAS buscam também se usam o nó do balanço acumulado.
+MASS_BALANCE_SEARCH = {
+    "gotas_lpv",
+    "gotas_a",
+    "gotas_ss",
+    "gotas_ae",
+    "gotas_aex",
+}
 NEURAL = [
     "gotas",
+    "gotas_w",
+    "gotas_lpv",
+    "gotas_a",
+    "gotas_ss",
+    "gotas_ae",
+    "gotas_aex",
     "mlp",
     "lstm",
     "gru",
@@ -111,6 +125,12 @@ NEURAL = [
 ]
 LABELS = {
     "gotas": "GOTAS",
+    "gotas_w": "GOTAS-W",
+    "gotas_lpv": "GOTAS-LPV",
+    "gotas_a": "GOTAS-A",
+    "gotas_ss": "GOTAS-SS",
+    "gotas_ae": "GOTAS-AE",
+    "gotas_aex": "GOTAS-AE explícito",
     "mlp": "MLP",
     "lstm": "LSTM",
     "gru": "GRU",
@@ -244,8 +264,105 @@ def neural_config(
             ),
         }
         l1 = trial.suggest_float("message_l1_weight", 1e-4, 1e-2, log=True)
+    elif model == "gotas_w":
+        # `docs/18_plano-gotas-w.md`: um filtro por aresta e componente.
+        kwargs = {
+            "levels": trial.suggest_int("levels", 3, 5),
+            "lags": trial.suggest_categorical("lags", [2, 4, 6, 8]),
+            "residual_hidden": trial.suggest_categorical(
+                "residual_hidden", [0, 8, 16, 32]
+            ),
+        }
+        l1 = trial.suggest_float("message_l1_weight", 1e-4, 1e-2, log=True)
+    elif model == "gotas_lpv":
+        # GOTAS-W com filtros que variam com as bombas e curvas de entrada.
+        kwargs = {
+            "levels": trial.suggest_int("levels", 3, 5),
+            "lags": trial.suggest_categorical("lags", [2, 4, 6, 8]),
+            "residual_hidden": trial.suggest_categorical(
+                "residual_hidden", [0, 8, 16, 32]
+            ),
+            "lpv": trial.suggest_categorical("lpv", [False, True]),
+            "hammerstein_degree": trial.suggest_categorical(
+                "hammerstein_degree", [0, 3]
+            ),
+        }
+        l1 = trial.suggest_float("message_l1_weight", 1e-4, 1e-2, log=True)
+    elif model == "gotas_a":
+        # Atenção por aresta, previsão direta a partir do último valor.
+        kwargs = {
+            "attention_dim": trial.suggest_categorical(
+                "attention_dim", [4, 8, 16]
+            ),
+            "operating_query": trial.suggest_categorical(
+                "operating_query", [False, True]
+            ),
+            "residual_hidden": trial.suggest_categorical(
+                "residual_hidden", [0, 8, 16, 32]
+            ),
+        }
+        l1 = trial.suggest_float("message_l1_weight", 1e-4, 1e-2, log=True)
+    elif model == "gotas_ss":
+        # Autoencoder linear de espaço de estados (`docs/19`).
+        kwargs = {
+            "state_dim": trial.suggest_categorical("state_dim", [4, 8, 16]),
+            "encoder_lags": trial.suggest_categorical(
+                "encoder_lags", [6, 12, 24]
+            ),
+            "residual_hidden": trial.suggest_categorical(
+                "residual_hidden", [0, 8, 16, 32]
+            ),
+        }
+        l1 = trial.suggest_float("message_l1_weight", 1e-4, 1e-2, log=True)
+    elif model == "gotas_ae":
+        # Autoencoder por banda com atenção no latente (`docs/19`).
+        kwargs = {
+            "levels": trial.suggest_categorical("levels", [0, 2, 3, 4]),
+            "latent_dim": trial.suggest_categorical("latent_dim", [4, 8, 16]),
+            "attention_dim": trial.suggest_categorical(
+                "attention_dim", [4, 8]
+            ),
+            "anchor": trial.suggest_categorical("anchor", ["mean", "last"]),
+            "residual_hidden": trial.suggest_categorical(
+                "residual_hidden", [0, 8, 16, 32]
+            ),
+            # `chebyshev`: resíduo polinomial explícito (vira equação).
+            "residual_kind": trial.suggest_categorical(
+                "residual_kind", ["mlp", "chebyshev"]
+            ),
+        }
+        l1 = trial.suggest_float("message_l1_weight", 1e-4, 1e-2, log=True)
+    elif model == "gotas_aex":
+        # GOTAS-AE só com o resíduo de Chebyshev: o modelo inteiro é a
+        # equação de `GOTASAutoencoder.equation` mais um polinômio NARX.
+        kwargs = {
+            "levels": trial.suggest_categorical("levels", [0, 2, 3, 4]),
+            "latent_dim": trial.suggest_categorical("latent_dim", [4, 8, 16]),
+            "attention_dim": trial.suggest_categorical(
+                "attention_dim", [4, 8]
+            ),
+            "anchor": trial.suggest_categorical("anchor", ["mean", "last"]),
+            "residual_kind": "chebyshev",
+            "residual_hidden": 1,  # só liga o resíduo
+            "residual_lags": trial.suggest_categorical(
+                "residual_lags", [12, 24, 48]
+            ),
+            "residual_degree": trial.suggest_categorical(
+                "residual_degree", [2, 3, 5]
+            ),
+        }
+        l1 = trial.suggest_float("message_l1_weight", 1e-4, 1e-2, log=True)
     else:
         kwargs = MODEL_SPACES[model](trial)
+    if model in MASS_BALANCE_SEARCH:
+        # O nó do balanço acumulado sai da faixa do treino depois das
+        # falhas de sensor; a busca decide, só na validação, se ele entra.
+        base = replace(
+            base,
+            mass_balance_feature=trial.suggest_categorical(
+                "mass_balance_feature", [True, False]
+            ),
+        )
     return replace(
         base,
         model=model,
